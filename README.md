@@ -337,8 +337,7 @@ copy suv_report_generator.py suv_report_generator.py.backup_20260407
 
 ## 📞 CONTATTI
 
-**Sviluppatore:** Claude  
-**Cliente:** Dr. Christian Bracco  
+**Sviluppatore:** Dr. Christian Bracco e Claude
 **Istituzione:** S.C. Interaziendale di Fisica Sanitaria, A.O. Ordine Mauriziano / A.S.L. TO3  
 **Email:** cbracco@mauriziano.it
 
