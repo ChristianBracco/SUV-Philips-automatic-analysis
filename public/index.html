@@ -409,6 +409,73 @@
             font-size: 12px;
             color: #999;
         }
+        
+        /* Series Selector */
+        .series-selector-container {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px 0;
+            display: none;
+        }
+        
+        .series-selector-title {
+            font-size: 18px;
+            color: #4FC3F7;
+            margin-bottom: 15px;
+        }
+        
+        .series-item {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .series-item input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+        
+        .series-info {
+            flex: 1;
+        }
+        
+        .series-desc {
+            font-weight: bold;
+            color: #4FC3F7;
+            margin-bottom: 5px;
+        }
+        
+        .series-details {
+            font-size: 12px;
+            color: #999;
+        }
+        
+        .series-warning {
+            background: rgba(255, 152, 0, 0.2);
+            border-left: 3px solid #FF9800;
+            padding: 5px 10px;
+            font-size: 11px;
+            color: #FFB74D;
+            margin-top: 5px;
+        }
+        
+        .select-btn {
+            background: rgba(79, 195, 247, 0.2);
+            color: #4FC3F7;
+            border: 1px solid #4FC3F7;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+            display: inline-block;
+        }
     </style>
 </head>
 <body>
@@ -455,6 +522,19 @@
                     </div>
                     
                     <div id="scan-status" class="status"></div>
+                    
+                    <!-- Series Selector -->
+                    <div id="series-selector-container" class="series-selector-container" style="display: none;">
+                        <div class="series-selector-title">📋 Seleziona Serie da Analizzare</div>
+                        <div style="margin-bottom: 15px;">
+                            <button class="select-btn" onclick="selectAllSeries()">Tutte</button>
+                            <button class="select-btn" onclick="deselectAllSeries()">Nessuna</button>
+                            <button class="select-btn" onclick="selectOnlyPET()">Solo PET</button>
+                        </div>
+                        <div id="series-list">
+                            <!-- Serie vengono aggiunte dinamicamente da app.js -->
+                        </div>
+                    </div>
                     
                     <div class="divider"></div>
                     

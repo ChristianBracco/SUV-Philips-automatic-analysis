@@ -27,6 +27,7 @@ class SUVAnalyzer:
     def __init__(self):
         self.pt_data = []
         self.ct_data = []
+        self.selected_series = None  # Set of selected series UIDs (None = all)
         self.secondary_captures = []
         self.config = self._load_default_config()
         
@@ -41,7 +42,7 @@ class SUVAnalyzer:
             "nu_ct_upper": 15.0,  # Non-uniformity CT max %
             "nu_ct_lower": -15.0,  # Non-uniformity CT min %
             "cv_ct_upper": 15.0,  # Coefficient of variation CT max %
-            "grid_size": 15,  # Griglia 15x15 per PET
+            "grid_size": 4,  # Griglia 4x4 per PET (era 15x15)
             "example_slice_pt": 15,  # Slice esempio PET
             "example_slice_ct": 15,  # Slice esempio CT
             "specialist": "Dr. Christian Bracco",
@@ -87,16 +88,20 @@ class SUVAnalyzer:
             # IMPORTANTE: Controlla PRIMA la modalità
             modality = ds.Modality if hasattr(ds, 'Modality') else None
             
-            # Secondary capture SOLO se non è PET/CT
-            # (alcuni CT Philips hanno ImageType='SECONDARY' ma sono comunque CT!)
-            is_secondary = False
-            if modality not in ['PT', 'CT']:
+            # Secondary capture: controlla SOP Class UID E ImageType
+            # SOP Class UID 1.2.840.10008.5.1.4.1.1.7 = Secondary Capture
+            sop_class = ds.SOPClassUID if hasattr(ds, 'SOPClassUID') else None
+            is_secondary = sop_class == '1.2.840.10008.5.1.4.1.1.7'
+            
+            # Fallback: controlla ImageType se SOP Class non è Secondary Capture
+            if not is_secondary and modality not in ['PT', 'CT']:
                 is_secondary = "SECONDARY" in str(ds.ImageType) if hasattr(ds, 'ImageType') else False
             
             info = {
                 'filepath': filepath,
                 'modality': modality,
                 'is_secondary': is_secondary,
+                'series_uid': str(ds.SeriesInstanceUID).strip() if hasattr(ds, 'SeriesInstanceUID') else None,
                 'manufacturer': ds.Manufacturer if hasattr(ds, 'Manufacturer') else 'Unknown',
                 'model': ds.ManufacturerModelName if hasattr(ds, 'ManufacturerModelName') else 'Unknown',
                 'patient_id': ds.PatientID if hasattr(ds, 'PatientID') else 'Unknown',
@@ -131,18 +136,27 @@ class SUVAnalyzer:
             img = ds.pixel_array
             
             # Gestione shape anomale - skippa PRIMA di processare
-            # Casi: (1,1,3), (2,2), o qualsiasi dimensione < 10px
+            # Casi: (1,1,3), (2,2), o qualsiasi dimensione < 10px O > 10000px
             if len(img.shape) == 2:
                 # Grayscale 2D
                 if img.shape[0] < 10 or img.shape[1] < 10:
+                    return None
+                if img.shape[0] > 10000 or img.shape[1] > 10000:
+                    print(f"  Skipping massive SC image: {img.shape}")
                     return None
             elif len(img.shape) == 3:
                 # RGB o multi-channel
                 if img.shape[0] < 10 or img.shape[1] < 10:
                     return None
+                if img.shape[0] > 10000 or img.shape[1] > 10000:
+                    print(f"  Skipping massive SC image: {img.shape}")
+                    return None
             elif len(img.shape) == 4:
                 # Multi-frame
                 if img.shape[1] < 10 or img.shape[2] < 10:
+                    return None
+                if img.shape[1] > 10000 or img.shape[2] > 10000:
+                    print(f"  Skipping massive SC multi-frame: {img.shape}")
                     return None
             
             # Se multi-frame, estrai info da ogni frame
@@ -150,40 +164,47 @@ class SUVAnalyzer:
             if len(img.shape) == 4:  # multi-frame
                 num_frames = img.shape[0]
                 for i in range(num_frames):
-                    frame = img[i]
+                    try:
+                        frame = img[i]
+                        frame = self.convert_to_uint8(frame)
 
-                    frame = self.convert_to_uint8(frame)
+                        if len(frame.shape) == 2:
+                            frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
 
-                    if len(frame.shape) == 2:
-                        frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
-
-                    img_pil = Image.fromarray(frame)                          
+                        img_pil = Image.fromarray(frame)                          
+                        buffered = BytesIO()
+                        img_pil.save(buffered, format="PNG")
+                        img_b64 = base64.b64encode(buffered.getvalue()).decode()
+                        
+                        frames.append({
+                            'frame_number': i,
+                            'image_b64': img_b64,
+                            'shape': frame.shape
+                        })
+                    except Exception as e:
+                        print(f"  Skipping frame {i}: {e}")
+                        continue
+            else:
+                # Singolo frame
+                try:
+                    img = self.convert_to_uint8(img)
+                    
+                    if len(img.shape) == 2:
+                        img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+                        
+                    img_pil = Image.fromarray(img)
                     buffered = BytesIO()
                     img_pil.save(buffered, format="PNG")
                     img_b64 = base64.b64encode(buffered.getvalue()).decode()
                     
                     frames.append({
-                        'frame_number': i,
+                        'frame_number': 0,
                         'image_b64': img_b64,
-                        'shape': frame.shape
+                        'shape': img.shape
                     })
-            else:
-                # Singolo frame
-                img = self.convert_to_uint8(img)
-                
-                if len(img.shape) == 2:
-                    img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
-                    
-                img_pil = Image.fromarray(img)
-                buffered = BytesIO()
-                img_pil.save(buffered, format="PNG")
-                img_b64 = base64.b64encode(buffered.getvalue()).decode()
-                
-                frames.append({
-                    'frame_number': 0,
-                    'image_b64': img_b64,
-                    'shape': img.shape
-                })
+                except Exception as e:
+                    print(f"  Skipping SC processing: {e}")
+                    return None
             
             result = {
                 'type': 'secondary_capture',
@@ -331,27 +352,58 @@ class SUVAnalyzer:
         print(f"Trovati {len(files)} file DICOM in {folder_path}")
         
         for filepath in files:
-            print(f"Processing: {filepath.name}")
-            info = self.read_dicom_file(str(filepath))
+            filename = filepath.name
+            print(f"Processing: {filename}")
             
-            if not info:
-                continue
-            
-            # Secondary capture
-            if info['is_secondary']:
-                self.process_secondary_capture(info)
-                continue
-            
-            # DICOM originali
-            if info['modality'] == 'PT':
-                result = self.calculate_suv_from_dicom(info, self.config['roi_fraction'])
-                if result:
-                    self.pt_data.append(result)
+            try:
+                info = self.read_dicom_file(str(filepath))
+                
+                if not info:
+                    print(f"  SKIPPED: read_dicom_file returned None")
+                    continue
+                
+                # Skip if not in selected series
+                if self.selected_series is not None:
+                    file_uid = info.get('series_uid')
+                    if file_uid not in self.selected_series:
+                        print(f"  SKIPPED: not in selected series")
+                        print(f"  [DEBUG] File UID: '{file_uid}'")
+                        print(f"  [DEBUG] Expected UIDs: {list(self.selected_series)[:2]}...")
+                        continue
+                
+                print(f"  Modality: {info['modality']}, is_secondary: {info['is_secondary']}")
+                
+                # Secondary capture - SKIP (non utilizzabili per SUV)
+                if info['is_secondary']:
+                    print(f"  SKIPPED: Secondary Capture (not usable for SUV analysis)")
+                    continue
+                
+                # DICOM originali
+                if info['modality'] == 'PT':
+                    print(f"  Processing as PET...")
+                    result = self.calculate_suv_from_dicom(info, self.config['roi_fraction'])
+                    if result:
+                        self.pt_data.append(result)
+                        print(f"  PET processed successfully")
+                    else:
+                        print(f"  PET processing returned None")
+                        
+                elif info['modality'] == 'CT':
+                    print(f"  Processing as CT...")
+                    result = self.calculate_hu_from_dicom(info, self.config['roi_fraction'])
+                    if result:
+                        self.ct_data.append(result)
+                        print(f"  CT processed successfully")
+                    else:
+                        print(f"  CT processing returned None")
+                else:
+                    print(f"  Unknown modality: {info['modality']}")
                     
-            elif info['modality'] == 'CT':
-                result = self.calculate_hu_from_dicom(info, self.config['roi_fraction'])
-                if result:
-                    self.ct_data.append(result)
+            except Exception as e:
+                print(f"  CRASH: {e}")
+                import traceback
+                traceback.print_exc()
+                raise  # Re-raise per far vedere l'errore completo
         
         # Ordina per instance number
         self.pt_data.sort(key=lambda x: x['instance_number'])
@@ -391,10 +443,11 @@ class SUVAnalyzer:
         
         results = {}
         
-        # Analisi PET con griglia 15x15
+        # Analisi PET con griglia configurabile (default 4x4)
         if self.pt_data:
-            print("Esecuzione analisi NEMA PET (griglia 15x15)...")
-            nema_pt = NEMAAnalysis(self.pt_data, modality='PT', grid_size=15)
+            grid_size = self.config.get('grid_size', 4)
+            print(f"Esecuzione analisi NEMA PET (griglia {grid_size}x{grid_size})...")
+            nema_pt = NEMAAnalysis(self.pt_data, modality='PT', grid_size=grid_size)
             pt_slice_data, pt_plot, pt_example = nema_pt.analyze_pet_grid(example_slice_pt)
             pt_stats = calculate_nema_statistics(pt_slice_data, self.config)
             
@@ -426,7 +479,7 @@ class SUVAnalyzer:
         from suv_report_generator import HTMLReportGenerator
         
         # Esegui analisi NEMA
-        print("\n📊 Esecuzione analisi NEMA...")
+        print("\nEsecuzione analisi NEMA...")
         nema_results = self.analyze_nema_uniformity(
             example_slice_pt=self.config.get('example_slice_pt', 15),
             example_slice_ct=self.config.get('example_slice_ct', 15)
@@ -473,7 +526,7 @@ def main():
     # Genera report
     analyzer.generate_html_report(args.output)
     
-    print("\n✅ Analisi completata!")
+    print("\nAnalisi completata!")
     return 0
 
 

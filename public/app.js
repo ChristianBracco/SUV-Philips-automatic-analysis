@@ -218,8 +218,8 @@ async function uploadAndProcessFiles(files) {
         
         showStatus('scan-status', `✅ ${files.length} file caricati - ${state.series.length} serie disponibili`, '');
         
-        // CARICA TUTTE LE SERIE
-        await loadAllSeries();
+        // MOSTRA CHECKBOX PER SELEZIONE SERIE
+        showSeriesSelector();
         
     } catch (error) {
         console.error('💥 Errore durante upload:', error);
@@ -620,7 +620,8 @@ async function runAnalysis() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                folderPaths: foldersToAnalyze
+                folderPaths: foldersToAnalyze,
+                selectedSeries: getSelectedSeriesUIDs()
             })
         });
         
@@ -638,7 +639,27 @@ async function runAnalysis() {
         // Show report
         const reportElement = document.getElementById('analysis-report');
         if (data.reportHtml && data.reportHtml.length > 0) {
-            reportElement.innerHTML = data.reportHtml;
+            // Se è solo un filename (corto), crea un link
+            if (data.reportHtml.length < 100 && data.reportHtml.endsWith('.html')) {
+                reportElement.innerHTML = `
+                    <div style="padding: 30px; text-align: center; background: rgba(76, 175, 80, 0.1); border-radius: 12px;">
+                        <h2 style="color: #4FC3F7; margin-bottom: 15px;">✅ Analisi Completata!</h2>
+                        <p style="margin-bottom: 20px; color: #ccc;">Report generato: ${data.ptCount} PET, ${data.ctCount} CT</p>
+                        <a href="${data.reportHtml}" target="_blank" 
+                           style="display: inline-block; padding: 15px 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                                  color: white; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                            📊 Apri Report Completo
+                        </a>
+                        <p style="margin-top: 15px; font-size: 12px; color: #999;">
+                            Il report è stato salvato anche in: <code style="color: #4FC3F7;">${data.reportHtml}</code>
+                        </p>
+                    </div>
+                `;
+            } else {
+                // È HTML completo, inseriscilo direttamente
+                reportElement.innerHTML = data.reportHtml;
+            }
+            
             console.log('Report inserted, element:', reportElement);
             
             // Scroll to report
@@ -669,4 +690,78 @@ function showStatus(elementId, message, type = '') {
     if (type === 'error') {
         el.classList.add('error');
     }
+}
+
+// ============================================================
+// SERIES SELECTOR
+// ============================================================
+
+function showSeriesSelector() {
+    const container = document.getElementById('series-selector-container');
+    const list = document.getElementById('series-list');
+    
+    if (!container || !list) {
+        console.error('Series selector elements not found!');
+        return;
+    }
+    
+    list.innerHTML = '';
+    
+    state.series.forEach((series, idx) => {
+        const item = document.createElement('div');
+        item.className = 'series-item';
+        
+        const isSecondaryCapture = series.seriesNumber > 40000 || 
+                                  series.description.includes('Secondary') ||
+                                  series.description.includes('SECONDARY');
+        
+        const defaultChecked = series.modality === 'PT' && !isSecondaryCapture;
+        
+        item.innerHTML = `
+            <input type="checkbox" id="series_${idx}" value="${series.uid}" 
+                   ${defaultChecked ? 'checked' : ''}>
+            <div class="series-info">
+                <div class="series-desc">${series.description}</div>
+                <div class="series-details">
+                    Modalità: ${series.modality} | 
+                    Serie: ${series.seriesNumber} | 
+                    File: ${series.fileCount}
+                </div>
+                ${isSecondaryCapture ? '<div class="series-warning">⚠️ Secondary Capture - potrebbe causare errori</div>' : ''}
+            </div>
+        `;
+        
+        list.appendChild(item);
+    });
+    
+    container.style.display = 'block';
+}
+
+function selectAllSeries() {
+    document.querySelectorAll('#series-list input[type="checkbox"]').forEach(cb => cb.checked = true);
+}
+
+function deselectAllSeries() {
+    document.querySelectorAll('#series-list input[type="checkbox"]').forEach(cb => cb.checked = false);
+}
+
+function selectOnlyPET() {
+    state.series.forEach((series, idx) => {
+        const cb = document.getElementById(`series_${idx}`);
+        const isSecondaryCapture = series.seriesNumber > 40000 ||
+                                  series.description.includes('Secondary') ||
+                                  series.description.includes('SECONDARY');
+        cb.checked = series.modality === 'PT' && !isSecondaryCapture;
+    });
+}
+
+function getSelectedSeriesUIDs() {
+    const selected = [];
+    state.series.forEach((series, idx) => {
+        const cb = document.getElementById(`series_${idx}`);
+        if (cb && cb.checked) {
+            selected.push(series.uid);
+        }
+    });
+    return selected;
 }

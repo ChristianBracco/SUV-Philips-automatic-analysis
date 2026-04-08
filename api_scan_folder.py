@@ -35,17 +35,33 @@ def scan_folder(folder_path):
             try:
                 ds = pydicom.dcmread(filepath, stop_before_pixels=True)
                 
-                series_uid = ds.SeriesInstanceUID if hasattr(ds, 'SeriesInstanceUID') else 'unknown'
+                series_uid = str(ds.SeriesInstanceUID).strip() if hasattr(ds, 'SeriesInstanceUID') else 'unknown'
                 series_desc = ds.SeriesDescription if hasattr(ds, 'SeriesDescription') else 'Unknown Series'
                 modality = ds.Modality if hasattr(ds, 'Modality') else 'Unknown'
                 instance_number = int(ds.InstanceNumber) if hasattr(ds, 'InstanceNumber') else 0
+                
+                # Riconosci Secondary Capture
+                is_secondary = False
+                if hasattr(ds, 'ImageType'):
+                    image_type_str = str(ds.ImageType)
+                    is_secondary = "SECONDARY" in image_type_str
+                
+                # SOP Class UID per SC
+                if hasattr(ds, 'SOPClassUID'):
+                    sop_class = str(ds.SOPClassUID)
+                    # 1.2.840.10008.5.1.4.1.1.7 = Secondary Capture
+                    # 1.2.840.10008.5.1.4.1.1.7.1 = Multi-frame SC
+                    if '1.2.840.10008.5.1.4.1.1.7' in sop_class:
+                        is_secondary = True
+                        modality = 'SC'  # Override modality
                 
                 series_groups[series_uid].append({
                     'filepath': filepath,
                     'series_desc': series_desc,
                     'modality': modality,
                     'instance_number': instance_number,
-                    'filename': os.path.basename(filepath)
+                    'filename': os.path.basename(filepath),
+                    'is_secondary': is_secondary
                 })
                 
             except Exception as e:

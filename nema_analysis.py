@@ -1,39 +1,82 @@
 """
-SUV NEMA Analysis Module
+SUV NEMA Analysis Module - VERSIONE RINNOVATA
 Analisi omogeneità secondo standard NEMA per PET/CT
+Plot moderni e layout spaziale per immagini
+
+Autore: Christian Bracco - S.C. Interaziendale di Fisica Sanitaria
 """
 
 import numpy as np
 import cv2
 from io import BytesIO
+import matplotlib
+matplotlib.use('Agg')  # Backend non-interattivo
 import matplotlib.pyplot as plt
+from matplotlib.gridspec import GridSpec
 import base64
-from PIL import Image
 
+
+# ============================================================================
+# CONFIGURAZIONE STILE MATPLOTLIB MODERNO
+# ============================================================================
+
+def setup_modern_style():
+    """Imposta stile matplotlib moderno e professionale"""
+    plt.style.use('seaborn-v0_8-darkgrid')
+    
+    # Parametri globali
+    plt.rcParams.update({
+        'figure.facecolor': '#1a1a2e',
+        'axes.facecolor': '#16213e',
+        'axes.edgecolor': '#4FC3F7',
+        'axes.labelcolor': '#e0e0e0',
+        'axes.grid': True,
+        'grid.color': '#2a2a4a',
+        'grid.alpha': 0.5,
+        'grid.linestyle': '--',
+        'grid.linewidth': 0.8,
+        'text.color': '#e0e0e0',
+        'xtick.color': '#b0b0b0',
+        'ytick.color': '#b0b0b0',
+        'font.size': 11,
+        'axes.titlesize': 13,
+        'axes.labelsize': 11,
+        'legend.facecolor': '#1a1a2e',
+        'legend.edgecolor': '#4FC3F7',
+        'legend.framealpha': 0.9
+    })
+
+
+# ============================================================================
+# CLASSE PRINCIPALE NEMA ANALYSIS
+# ============================================================================
 
 class NEMAAnalysis:
-    """Analisi omogeneità secondo NEMA 94"""
+    """Analisi omogeneità secondo NEMA 94 con plot moderni"""
     
-    def __init__(self, results_data, modality='PT', grid_size=15):
+    def __init__(self, results_data, modality='PT', grid_size=4):
         """
         Args:
             results_data: Lista risultati da SUVAnalyzer
             modality: 'PT' o 'CT'
-            grid_size: Dimensione griglia (default 15x15 per PET)
+            grid_size: Dimensione griglia (default 4x4, NEMA usa 15x15)
         """
         self.results_data = results_data
         self.modality = modality
         self.grid_size = grid_size
         self.slice_data = []
         
+        # Setup stile moderno
+        setup_modern_style()
+        
     def analyze_pet_grid(self, example_slice=15):
         """
-        Analisi PET con griglia 15x15 (NEMA 94)
+        Analisi PET con griglia NxN (default 4x4)
         
         Returns:
             slice_data: Lista statistiche per slice
-            plot_combined: Plot CV e NU combinati
-            plot_example: Immagine esempio con griglia
+            plot_combined: Plot CV e NU moderni
+            plot_gallery: Galleria immagini con griglia
         """
         VMPmax = []
         VMPmin = []
@@ -43,7 +86,8 @@ class NEMAAnalysis:
         NUmax = []
         NUmin = []
         
-        example_img = None
+        # Raccolta immagini per galleria
+        gallery_images = []
         
         for idx, result in enumerate(self.results_data):
             # Estrai dati
@@ -62,47 +106,52 @@ class NEMAAnalysis:
                     image = cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
                 else:
                     image = img
-                img_with_circle = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
-                img_with_grid = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+                img_with_grid = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
             else:
-                img_with_circle = img.copy()
                 img_with_grid = img.copy()
             
-            # Disegna cerchio ROI
-            cv2.circle(img_with_circle, (cx, cy), radius, (255, 0, 0), 2)
+            # GRIGLIA NEMA: calcola dimensioni in base al radius
+            # ROI size: 1/10 del diametro del fantoccio (NEMA standard)
+            roi_size = max(int(radius * 0.1), 6)  # min 6x6 pixel
             
-            # Griglia 15x15 con celle 4x4
+            # Spacing: distribuisci le ROI uniformemente
+            # Per grid 4x4, copri circa il 75% del diametro
+            grid_span = int(radius * 1.5)  # 150% del radius = copre tutto il disco
+            spacing = grid_span // self.grid_size
+            
+            # Centro griglia
+            x_start = cx - grid_span // 2
+            y_start = cy - grid_span // 2
+            
             temp_means = []
-            cell_size = 4
-            x = cx - radius
-            y = cy - radius
             
             for j in range(self.grid_size):
                 for i in range(self.grid_size):
-                    # Distanza dal centro
-                    m = np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
+                    x = x_start + i * spacing + spacing // 2
+                    y = y_start + j * spacing + spacing // 2
                     
-                    # Solo celle dentro ROI
-                    if m < radius - 4:
-                        # Disegna rettangolo
-                        top_left = (x - 2, y - 2)
-                        bottom_right = (x + 2, y + 2)
-                        cv2.rectangle(img_with_grid, top_left, bottom_right, (0, 0, 255), 1)
+                    # Distanza dal centro
+                    dist = np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
+                    
+                    # Solo celle dentro il disco (con margine)
+                    if dist < radius - roi_size:
+                        # Disegna rettangolo ROI
+                        half = roi_size // 2
+                        top_left = (int(x - half), int(y - half))
+                        bottom_right = (int(x + half), int(y + half))
+                        cv2.rectangle(img_with_grid, top_left, bottom_right, (0, 255, 255), 1)
                         
                         # Estrai ROI cella
-                        roi_cell = img[int(y - 2):int(y + 2), int(x - 2):int(x + 2)]
+                        roi_cell = img[int(y - half):int(y + half), int(x - half):int(x + half)]
                         
                         # Calcola SUV
                         if roi_cell.size > 0:
                             suv_values = roi_cell * suv_scale_factor
                             cell_mean = np.mean(suv_values)
                             temp_means.append(cell_mean)
-                    
-                    x += cell_size
-                
-                # Prossima riga
-                x = cx - radius
-                y += cell_size
+            
+            # Disegna cerchio ROI
+            cv2.circle(img_with_grid, (cx, cy), radius, (255, 0, 255), 2)
             
             # Statistiche slice
             if temp_means:
@@ -136,16 +185,24 @@ class NEMAAnalysis:
                     'NUmin': nu_min
                 })
             
-            # Salva esempio
-            if idx == example_slice - 1:
-                example_img = (img_with_circle, img_with_grid)
+            # Salva per galleria (ogni 10 slice)
+            if idx % 10 == 0 or idx == example_slice - 1:
+                gallery_images.append({
+                    'image': img_with_grid,
+                    'instance': instance_number,
+                    'cv': cv if temp_means else 0
+                })
         
         # Grafici combinati
         instance_numbers = [d['instance_number'] for d in self.slice_data]
-        plot_combined = self._create_combined_plot(instance_numbers, CV, NUmax, NUmin, 'PET')
-        plot_example = self._create_example_plot(example_img, example_slice) if example_img else None
+        plot_combined = self._create_combined_plot_modern(
+            instance_numbers, CV, NUmax, NUmin, 'PET'
+        )
         
-        return self.slice_data, plot_combined, plot_example
+        # Galleria immagini
+        plot_gallery = self._create_image_gallery(gallery_images, 'PET')
+        
+        return self.slice_data, plot_combined, plot_gallery
     
     def analyze_ct_circles(self, example_slice=15):
         """
@@ -153,8 +210,8 @@ class NEMAAnalysis:
         
         Returns:
             slice_data: Lista statistiche per slice
-            plot_combined: Plot CV e NU combinati
-            plot_example: Immagine esempio con cerchi
+            plot_combined: Plot CV e NU moderni
+            plot_gallery: Galleria immagini con cerchi
         """
         VMPmax = []
         VMPmin = []
@@ -164,7 +221,8 @@ class NEMAAnalysis:
         NUmax = []
         NUmin = []
         
-        example_img = None
+        # Raccolta immagini per galleria
+        gallery_images = []
         
         for idx, result in enumerate(self.results_data):
             # Estrai dati
@@ -182,14 +240,12 @@ class NEMAAnalysis:
                     image = cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
                 else:
                     image = img
-                img_with_circle = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
                 img_with_circles = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
             else:
-                img_with_circle = img.copy()
                 img_with_circles = img.copy()
             
             # Disegna ROI principale
-            cv2.circle(img_with_circle, (cx, cy), radius, (255, 0, 0), 2)
+            cv2.circle(img_with_circles, (cx, cy), radius, (255, 0, 255), 2)
             
             # 5 cerchi al 5% dell'area ROI
             area_circle = 0.05 * area_80
@@ -209,15 +265,15 @@ class NEMAAnalysis:
             
             for pos_name, (px, py) in positions.items():
                 # Disegna cerchio
-                cv2.circle(img_with_circles, (px, py), circle_radius, (0, 0, 255), 2)
+                cv2.circle(img_with_circles, (px, py), circle_radius, (0, 255, 255), 2)
                 
                 # Maschera cerchio
-                mask = np.zeros_like(img, dtype=np.uint8)
-                cv2.circle(mask, (px, py), circle_radius, 1, -1)
+                mask_circle = np.zeros_like(img, dtype=np.uint8)
+                cv2.circle(mask_circle, (px, py), circle_radius, 1, -1)
                 
                 # Media pixel nel cerchio
-                masked_img = img * mask
-                mean_value = np.sum(masked_img) / np.sum(mask) if np.sum(mask) > 0 else 0
+                masked_img = img * mask_circle
+                mean_value = np.sum(masked_img) / np.sum(mask_circle) if np.sum(mask_circle) > 0 else 0
                 
                 temp_means.append(mean_value)
                 circle_means_dict[pos_name] = mean_value
@@ -255,43 +311,93 @@ class NEMAAnalysis:
                     'NUmin': nu_min
                 })
             
-            # Salva esempio
-            if idx == example_slice - 1:
-                example_img = (img_with_circle, img_with_circles)
+            # Salva per galleria (ogni 10 slice)
+            if idx % 10 == 0 or idx == example_slice - 1:
+                gallery_images.append({
+                    'image': img_with_circles,
+                    'instance': instance_number,
+                    'cv': cv if temp_means else 0
+                })
         
         # Grafici
         instance_numbers = [d['instance_number'] for d in self.slice_data]
-        plot_combined = self._create_combined_plot(instance_numbers, CV, NUmax, NUmin, 'CT')
-        plot_example = self._create_example_plot(example_img, example_slice) if example_img else None
+        plot_combined = self._create_combined_plot_modern(
+            instance_numbers, CV, NUmax, NUmin, 'CT'
+        )
         
-        return self.slice_data, plot_combined, plot_example
+        # Galleria immagini
+        plot_gallery = self._create_image_gallery(gallery_images, 'CT')
+        
+        return self.slice_data, plot_combined, plot_gallery
     
-    def _create_combined_plot(self, instance_numbers, CV, NUmax, NUmin, modality):
-        """Crea plot combinato CV e NU"""
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+    def _create_combined_plot_modern(self, instance_numbers, CV, NUmax, NUmin, modality):
+        """
+        Crea plot combinato CV e NU con stile moderno
+        Layout: 2 subplot affiancati con stile dark/neon
+        """
+        fig = plt.figure(figsize=(16, 6))
+        gs = GridSpec(1, 2, figure=fig, wspace=0.3)
         
-        # Plot CV
-        ax1.plot(instance_numbers, CV, marker='o', linestyle='None', color='b', label='CV')
-        ax1.set_xlabel('Instance Number')
-        ax1.set_ylabel('CV (%)')
-        ax1.set_title(f'CV vs Instance Number ({modality} images)')
-        ax1.grid(True)
-        ax1.legend()
+        # Colori moderni
+        color_cv = '#00F2FE'  # Ciano neon
+        color_nu_max = '#F093FB'  # Rosa neon
+        color_nu_min = '#F5576C'  # Rosso neon
         
-        # Plot NU
-        ax2.plot(instance_numbers, NUmax, marker='o', linestyle='None', color='g', label='NUmax')
-        ax2.plot(instance_numbers, NUmin, marker='o', linestyle='None', color='r', label='NUmin')
-        ax2.set_xlabel('Instance Number')
-        ax2.set_ylabel('Non Uniformity (%)')
-        ax2.set_title(f'NUmax and NUmin vs Instance Number ({modality} images)')
-        ax2.grid(True)
-        ax2.legend()
+        # ===== SUBPLOT 1: COEFFICIENT OF VARIATION =====
+        ax1 = fig.add_subplot(gs[0])
+        
+        # Plot scatter + linea connettrice
+        ax1.plot(instance_numbers, CV, marker='o', markersize=8, 
+                linestyle='-', linewidth=2, color=color_cv, 
+                label='CV (%)', alpha=0.8, markerfacecolor=color_cv, 
+                markeredgecolor='white', markeredgewidth=1.5)
+        
+        # Media line
+        cv_mean = np.mean(CV)
+        ax1.axhline(cv_mean, color='#FFD700', linestyle='--', 
+                   linewidth=2, alpha=0.7, label=f'CV medio = {cv_mean:.2f}%')
+        
+        ax1.set_xlabel('Instance Number', fontsize=12, fontweight='bold')
+        ax1.set_ylabel('CV (%)', fontsize=12, fontweight='bold')
+        ax1.set_title(f'Coefficient of Variation - {modality} Images', 
+                     fontsize=14, fontweight='bold', color='#4FC3F7', pad=15)
+        ax1.legend(loc='upper right', fontsize=10)
+        ax1.grid(True, alpha=0.3)
+        
+        # ===== SUBPLOT 2: NON-UNIFORMITY =====
+        ax2 = fig.add_subplot(gs[1])
+        
+        # Plot NUmax e NUmin
+        ax2.plot(instance_numbers, NUmax, marker='s', markersize=7, 
+                linestyle='-', linewidth=2, color=color_nu_max, 
+                label='NU max (%)', alpha=0.8, markerfacecolor=color_nu_max,
+                markeredgecolor='white', markeredgewidth=1.5)
+        
+        ax2.plot(instance_numbers, NUmin, marker='D', markersize=7, 
+                linestyle='-', linewidth=2, color=color_nu_min, 
+                label='NU min (%)', alpha=0.8, markerfacecolor=color_nu_min,
+                markeredgecolor='white', markeredgewidth=1.5)
+        
+        # Linea zero
+        ax2.axhline(0, color='white', linestyle=':', linewidth=1, alpha=0.5)
+        
+        # Limiti tolleranza (±15%)
+        ax2.axhline(15, color='yellow', linestyle='--', linewidth=1.5, alpha=0.6)
+        ax2.axhline(-15, color='yellow', linestyle='--', linewidth=1.5, alpha=0.6)
+        
+        ax2.set_xlabel('Instance Number', fontsize=12, fontweight='bold')
+        ax2.set_ylabel('Non-Uniformity (%)', fontsize=12, fontweight='bold')
+        ax2.set_title(f'Non-Uniformity (NUmax & NUmin) - {modality} Images', 
+                     fontsize=14, fontweight='bold', color='#4FC3F7', pad=15)
+        ax2.legend(loc='upper right', fontsize=10)
+        ax2.grid(True, alpha=0.3)
         
         plt.tight_layout()
         
         # Salva in buffer
         buf = BytesIO()
-        plt.savefig(buf, format='png', bbox_inches='tight', dpi=150)
+        plt.savefig(buf, format='png', bbox_inches='tight', dpi=150, 
+                   facecolor=fig.get_facecolor())
         buf.seek(0)
         plt.close()
         
@@ -299,26 +405,48 @@ class NEMAAnalysis:
         img_b64 = base64.b64encode(buf.getvalue()).decode()
         return img_b64
     
-    def _create_example_plot(self, images, slice_num):
-        """Crea plot esempio con ROI e griglia/cerchi"""
-        img_circle, img_overlay = images
+    def _create_image_gallery(self, gallery_images, modality):
+        """
+        Crea galleria immagini 2x3 con slice ROI/griglia
+        Layout spaziale moderno
+        """
+        if not gallery_images:
+            return None
         
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+        # Prendi max 6 immagini
+        images_to_show = gallery_images[:6]
+        n_images = len(images_to_show)
         
-        ax1.imshow(cv2.cvtColor(img_circle, cv2.COLOR_BGR2RGB))
-        ax1.set_title(f'ROI Contour (Slice {slice_num})')
-        ax1.axis('off')
+        # Layout 2 righe x 3 colonne
+        fig = plt.figure(figsize=(18, 12))
+        gs = GridSpec(2, 3, figure=fig, hspace=0.3, wspace=0.2)
         
-        ax2.imshow(cv2.cvtColor(img_overlay, cv2.COLOR_BGR2RGB))
-        title = 'Grid in ROI' if self.modality == 'PT' else 'Circles in ROI'
-        ax2.set_title(f'{title} (Slice {slice_num})')
-        ax2.axis('off')
+        for idx, img_data in enumerate(images_to_show):
+            row = idx // 3
+            col = idx % 3
+            ax = fig.add_subplot(gs[row, col])
+            
+            # Converti BGR a RGB
+            img_rgb = cv2.cvtColor(img_data['image'], cv2.COLOR_BGR2RGB)
+            
+            ax.imshow(img_rgb)
+            ax.axis('off')
+            
+            # Titolo con info
+            title = f"Slice {img_data['instance']} | CV = {img_data['cv']:.2f}%"
+            ax.set_title(title, fontsize=12, fontweight='bold', 
+                        color='#4FC3F7', pad=10)
         
-        plt.tight_layout()
+        # Titolo generale
+        fig.suptitle(f'{modality} NEMA Analysis - ROI Gallery', 
+                    fontsize=16, fontweight='bold', color='#4FC3F7', y=0.98)
+        
+        plt.tight_layout(rect=[0, 0, 1, 0.96])
         
         # Salva in buffer
         buf = BytesIO()
-        plt.savefig(buf, format='png', bbox_inches='tight', dpi=150)
+        plt.savefig(buf, format='png', bbox_inches='tight', dpi=150,
+                   facecolor=fig.get_facecolor())
         buf.seek(0)
         plt.close()
         
@@ -344,6 +472,9 @@ def calculate_nema_statistics(slice_data, config):
     # Escludi prime 5 e ultime 5 slices
     n_slices = len(slice_data)
     valid_slices = slice_data[5:n_slices-5] if n_slices > 10 else slice_data
+    
+    if not valid_slices:
+        return None
     
     # Estrai metriche
     cv_values = [s['CV'] for s in valid_slices]

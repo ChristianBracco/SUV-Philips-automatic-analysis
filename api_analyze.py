@@ -1,83 +1,84 @@
 #!/usr/bin/env python3
 """
-API: Run SUV Analysis
-Esegue analisi completa e genera report
-Supporta array di cartelle per analisi multi-serie
+API: Analyze DICOM series
+Esegue analisi SUV solo sulle serie selezionate
 """
 
 import sys
 import json
+from pathlib import Path
+import pydicom
+
+# Import SUV analyzer
 from suv_analyzer import SUVAnalyzer
-from suv_report_generator import HTMLReportGenerator
-from nema_analysis import NEMAAnalysis, calculate_nema_statistics
 
-
-def run_analysis(folder_paths):
-    """Esegue analisi SUV completa su array di cartelle"""
+def main():
+    """Main analysis function"""
     try:
-        # Analyzer unico per tutte le cartelle
+        # Parse arguments
+        if len(sys.argv) < 2:
+            raise ValueError("Missing folder_path argument")
+        
+        folder_path = sys.argv[1]
+        
+        # Check for selected series UIDs (optional)
+        selected_series = []
+        if len(sys.argv) > 2:
+            # Additional args are selected series UIDs
+            selected_series = sys.argv[2:]
+        
+        print(f"Analyzing folder: {folder_path}", flush=True)
+        if selected_series:
+            print(f"Selected series: {len(selected_series)}", flush=True)
+        
+        # Filter DICOM files if series selected
+        if selected_series:
+            # Find only files from selected series
+            all_files = list(Path(folder_path).glob('*.dcm'))
+            filtered_files = []
+            
+            for filepath in all_files:
+                try:
+                    ds = pydicom.dcmread(filepath, stop_before_pixels=True)
+                    if hasattr(ds, 'SeriesInstanceUID') and ds.SeriesInstanceUID in selected_series:
+                        filtered_files.append(filepath)
+                except:
+                    continue
+            
+            print(f"Found {len(all_files)} total files, {len(filtered_files)} in selected series", flush=True)
+            
+            # Create temp folder with filtered files
+            # For now, we'll just modify process_folder to skip non-selected files
+            # This is a quick hack - in production we'd copy files to temp folder
+        
+        # Create analyzer
         analyzer = SUVAnalyzer()
         
-        # Processa ogni cartella
-        for folder_path in folder_paths:
-            analyzer.process_folder(folder_path)
+        # Pass selected series to analyzer
+        analyzer.selected_series = set(selected_series) if selected_series else None
         
-        # NEMA analysis
-        nema_results = {}
-        
-        if analyzer.pt_data:
-            nema_pet = NEMAAnalysis(analyzer.pt_data, modality='PT', grid_size=15)
-            slice_data, plot_combined, plot_example = nema_pet.analyze_pet_grid()
-            stats = calculate_nema_statistics(slice_data, analyzer.config)
-            
-            nema_results['pet'] = {
-                'slice_data': slice_data,
-                'plot_combined': plot_combined,
-                'plot_example': plot_example,
-                'statistics': stats
-            }
-        
-        if analyzer.ct_data:
-            nema_ct = NEMAAnalysis(analyzer.ct_data, modality='CT')
-            slice_data, plot_combined, plot_example = nema_ct.analyze_ct_circles()
-            stats = calculate_nema_statistics(slice_data, analyzer.config)
-            
-            nema_results['ct'] = {
-                'slice_data': slice_data,
-                'plot_combined': plot_combined,
-                'plot_example': plot_example,
-                'statistics': stats
-            }
+        # Process folder
+        analyzer.process_folder(folder_path)
         
         # Generate report
-        report_gen = HTMLReportGenerator(analyzer, nema_results)
-        html_report = report_gen.generate()
+        report_html = analyzer.generate_html_report()
         
+        # Return results
         result = {
             'success': True,
-            'reportHtml': html_report,
-            'stats': {
-                'ptSlices': len(analyzer.pt_data) if analyzer.pt_data else 0,
-                'ctSlices': len(analyzer.ct_data) if analyzer.ct_data else 0,
-                'foldersProcessed': len(folder_paths)
-            }
+            'reportHtml': report_html,
+            'ptCount': len(analyzer.pt_data),
+            'ctCount': len(analyzer.ct_data)
         }
         
-        print(json.dumps(result))
+        print(json.dumps(result), flush=True)
         
     except Exception as e:
         print(json.dumps({
             'success': False,
             'error': str(e)
-        }))
+        }), flush=True)
         sys.exit(1)
-
 
 if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        print(json.dumps({'error': 'Missing folder path arguments'}))
-        sys.exit(1)
-    
-    # Tutti gli argomenti dopo lo script sono folder paths
-    folder_paths = sys.argv[1:]
-    run_analysis(folder_paths)
+    main()

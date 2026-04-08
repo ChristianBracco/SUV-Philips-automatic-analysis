@@ -1,6 +1,7 @@
 /**
  * SUV Analyzer - Bun Server
  * Backend server per interfaccia web HTML/JS
+ * Supporto multi-platform: Windows (python) + Linux/Mac (python3)
  */
 
 import { serve } from "bun";
@@ -24,13 +25,31 @@ const MIME_TYPES: Record<string, string> = {
   '.ico': 'image/x-icon'
 };
 
+// Helper: determina comando Python (python3 su Linux/Mac, python su Windows)
+function getPythonCommand(): string {
+  const platform = process.platform;
+  return platform === 'win32' ? 'python' : 'python3';
+}
+
 // Helper: esegui script Python
-async function runPython(script: string, args: string[] = []): Promise<any> {
+async function runPython(script: string, args: string[] = [], timeout = 300000): Promise<any> {
   return new Promise((resolve, reject) => {
-    const pythonProcess = spawn('python3', [script, ...args]);
+    const pythonCmd = getPythonCommand();
+    console.log(`  🐍 Running: ${pythonCmd} ${script} ${args.slice(0, 2).join(' ')}...`);
+    
+    const pythonProcess = spawn(pythonCmd, [script, ...args]);
     
     let stdout = '';
     let stderr = '';
+    let timeoutHandle: Timer | null = null;
+    
+    // Timeout per analisi lunghe (default 5 minuti)
+    if (timeout > 0) {
+      timeoutHandle = setTimeout(() => {
+        pythonProcess.kill();
+        reject(new Error(`Python process timeout after ${timeout}ms`));
+      }, timeout);
+    }
     
     pythonProcess.stdout.on('data', (data) => {
       stdout += data.toString();
@@ -41,6 +60,8 @@ async function runPython(script: string, args: string[] = []): Promise<any> {
     });
     
     pythonProcess.on('close', (code) => {
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+      
       if (code === 0) {
         try {
           // Prova parsing diretto
@@ -63,12 +84,16 @@ async function runPython(script: string, args: string[] = []): Promise<any> {
           resolve({ output: stdout });
         }
       } else {
-        reject(new Error(stderr || 'Python script failed'));
+        const errorMsg = stderr || stdout || 'Python script failed';
+        console.error(`  ❌ Python error (${pythonCmd}):`, errorMsg.substring(0, 500));
+        reject(new Error(errorMsg));
       }
     });
     
     pythonProcess.on('error', (err) => {
-      reject(err);
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+      console.error(`  ❌ Failed to spawn ${pythonCmd}:`, err);
+      reject(new Error(`Failed to start Python: ${err.message}. Make sure Python is installed and in PATH.`));
     });
   });
 }
@@ -76,6 +101,9 @@ async function runPython(script: string, args: string[] = []): Promise<any> {
 // Server Bun
 serve({
   port: PORT,
+  
+  // Aumenta limite body per file DICOM grandi
+  maxRequestBodySize: 500 * 1024 * 1024, // 500MB
   
   async fetch(req) {
     const url = new URL(req.url);
@@ -183,7 +211,7 @@ serve({
     if (path === '/api/analyze' && req.method === 'POST') {
       try {
         const body = await req.json();
-        let { folderPath, folderPaths } = body;
+        let { folderPath, folderPaths, selectedSeries } = body;
         
         // Supporta sia folderPath singolo che folderPaths array
         if (folderPath && !folderPaths) {
@@ -197,10 +225,13 @@ serve({
           });
         }
         
-        // Analizza ogni cartella e unisci i risultati
-        // Per ora passiamo solo la prima (backward compatibility)
-        // TODO: modificare api_analyze.py per gestire array
-        const result = await runPython('api_analyze.py', folderPaths);
+        // Prepara argomenti: folderPath + selectedSeries UIDs
+        const args = [...folderPaths];
+        if (selectedSeries && Array.isArray(selectedSeries) && selectedSeries.length > 0) {
+          args.push(...selectedSeries);
+        }
+        
+        const result = await runPython('api_analyze.py', args);
         
         return new Response(JSON.stringify(result), {
           headers: { 'Content-Type': 'application/json' }
