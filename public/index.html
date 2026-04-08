@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SUV Analyzer v3.0</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+        }
+        
+        header {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px 30px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        h1 {
+            color: #4FC3F7;
+            font-size: 32px;
+            margin-bottom: 5px;
+        }
+        
+        .subtitle {
+            color: #999;
+            font-size: 14px;
+        }
+        
+        .main-grid {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 20px;
+        }
+        
+        .sidebar {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 25px;
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .section-title {
+            font-size: 18px;
+            color: #4FC3F7;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .input-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #bbb;
+            font-size: 14px;
+        }
+        
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.3s;
+        }
+        
+        input[type="text"]:focus {
+            border-color: #4FC3F7;
+            background: rgba(255, 255, 255, 0.15);
+        }
+        
+        button {
+            width: 100%;
+            padding: 12px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        button.secondary {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        
+        button.browse {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            margin-bottom: 10px;
+        }
+        
+        select {
+            width: 100%;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+        }
+        
+        select option {
+            background: #1a1a2e;
+            color: #fff;
+        }
+        
+        .status {
+            margin-top: 15px;
+            padding: 12px;
+            background: rgba(79, 195, 247, 0.1);
+            border-left: 3px solid #4FC3F7;
+            border-radius: 4px;
+            font-size: 13px;
+            display: none;
+        }
+        
+        .status.visible {
+            display: block;
+        }
+        
+        .status.error {
+            background: rgba(244, 67, 54, 0.1);
+            border-left-color: #f44336;
+        }
+        
+        .viewer-container {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 25px;
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+        }
+        
+        #dicom-viewer {
+            width: 100%;
+            height: 800px;
+            background: #000;
+            border-radius: 8px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        #dicom-canvas {
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+        }
+        
+        .viewer-info {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 12px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            color: #0f0;
+            text-shadow: 0 0 5px #0f0;
+            pointer-events: none;
+        }
+        
+        .viewer-help {
+            position: absolute;
+            bottom: 15px;
+            right: 15px;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            line-height: 1.5;
+            color: #fff;
+            pointer-events: none;
+        }
+        
+        .viewer-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #666;
+        }
+        
+        .viewer-empty-icon {
+            font-size: 80px;
+            margin-bottom: 20px;
+            opacity: 0.3;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            padding: 12px 24px;
+            background: rgba(255, 255, 255, 0.05);
+            border: none;
+            border-radius: 8px 8px 0 0;
+            color: #999;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .tab.active {
+            background: rgba(79, 195, 247, 0.2);
+            color: #4FC3F7;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .divider {
+            height: 1px;
+            background: rgba(255, 255, 255, 0.1);
+            margin: 20px 0;
+        }
+        
+        /* Drop Zone */
+        .drop-zone {
+            border: 2px dashed rgba(79, 195, 247, 0.5);
+            border-radius: 12px;
+            padding: 30px;
+            text-align: center;
+            background: rgba(79, 195, 247, 0.05);
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+        
+        .drop-zone:hover {
+            border-color: #4FC3F7;
+            background: rgba(79, 195, 247, 0.1);
+        }
+        
+        .drop-zone.drag-over {
+            border-color: #4FC3F7;
+            background: rgba(79, 195, 247, 0.2);
+            transform: scale(1.02);
+        }
+        
+        .drop-zone-content {
+            pointer-events: none;
+        }
+        
+        .drop-zone-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+            opacity: 0.6;
+        }
+        
+        .drop-zone-text {
+            font-size: 16px;
+            color: #4FC3F7;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+        
+        .drop-zone-hint {
+            font-size: 12px;
+            color: #999;
+            margin: 10px 0;
+        }
+        
+        .drop-zone-btn {
+            width: auto;
+            padding: 10px 20px;
+            margin-top: 10px;
+            pointer-events: all;
+            font-size: 14px;
+        }
+        
+        .drop-zone-files {
+            margin-top: 15px;
+            text-align: left;
+            font-size: 12px;
+            color: #999;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        
+        .drop-zone-file-item {
+            padding: 5px 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+            margin: 5px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .drop-zone-file-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .drop-zone-file-size {
+            margin-left: 10px;
+            color: #666;
+        }
+        
+        /* Series Cards */
+        .series-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .series-card {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+            position: relative;
+        }
+        
+        .series-card:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateX(5px);
+        }
+        
+        .series-card.active {
+            border-color: #4FC3F7;
+            background: rgba(79, 195, 247, 0.2);
+        }
+        
+        .modality-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .modality-pt {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+        
+        .modality-ct {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+        
+        .series-card-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 5px;
+            padding-right: 50px;
+        }
+        
+        .series-card-info {
+            font-size: 12px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 SUV Analyzer v3.0</h1>
+            <p class="subtitle">Analisi Quantitativa PET/CT - Quality Control</p>
+            <p class="subtitle">S.C. Interaziendale di Fisica Sanitaria - A.O. Ordine Mauriziano / A.S.L. TO3</p>
+        </header>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('viewer')">🖼️ DICOM Viewer</button>
+            <button class="tab" onclick="switchTab('analysis')">⚡ Analisi SUV</button>
+        </div>
+        
+        <div id="tab-viewer" class="tab-content active">
+            <div class="main-grid">
+                <div class="sidebar">
+                    <div class="section-title">🔍 Carica DICOM</div>
+                    
+                    <!-- Drag & Drop Zone -->
+                    <div id="drop-zone" class="drop-zone">
+                        <div class="drop-zone-content">
+                            <div class="drop-zone-icon">📁</div>
+                            <div class="drop-zone-text">Trascina file DICOM qui</div>
+                            <div class="drop-zone-hint">Oppure</div>
+                            <button class="drop-zone-btn" onclick="document.getElementById('file-input').click()">
+                                Seleziona File
+                            </button>
+                            <input type="file" id="file-input" multiple accept=".dcm" style="display: none;">
+                        </div>
+                        <div id="drop-zone-files" class="drop-zone-files"></div>
+                    </div>
+                    
+                    <div class="divider" style="margin: 15px 0;"></div>
+                    
+                    <!-- Path manuale -->
+                    <div class="input-group">
+                        <label>Oppure inserisci path cartella:</label>
+                        <input type="text" id="folder-path" placeholder="/path/to/dicom/folder">
+                        <button onclick="scanFolder()" style="margin-top: 10px;">
+                            🔍 Scansiona Cartella
+                        </button>
+                    </div>
+                    
+                    <div id="scan-status" class="status"></div>
+                    
+                    <div class="divider"></div>
+                    
+                    <div class="section-title">📂 Serie Caricate</div>
+                    
+                    <div id="series-container" class="series-container">
+                        <!-- Serie cards popolate dinamicamente -->
+                    </div>
+                    
+                    <div id="series-info" class="status"></div>
+                </div>
+                
+                <div class="viewer-container">
+                    <div class="section-title">🖼️ DICOM Viewer</div>
+                    <div id="dicom-viewer">
+                        <div class="viewer-empty">
+                            <div class="viewer-empty-icon">📁</div>
+                            <p>Seleziona una serie DICOM per iniziare</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="tab-analysis" class="tab-content">
+            <div class="sidebar" style="max-width: 600px; margin: 0 auto;">
+                <div class="section-title">⚡ Esegui Analisi SUV</div>
+                <p style="color: #999; margin-bottom: 20px;">
+                    Esegue l'analisi completa SUV e NEMA su tutti i file DICOM caricati.
+                </p>
+                
+                <button class="secondary" onclick="runAnalysis()">
+                    ▶️ Avvia Analisi
+                </button>
+                
+                <div id="analysis-status" class="status"></div>
+                
+                <div id="analysis-report" style="margin-top: 20px;"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/app.js"></script>
+</body>
+</html>

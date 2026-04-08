@@ -1,0 +1,24 @@
+{
+  "name": "suv-analyzer-v3",
+  "version": "3.0.0",
+  "description": "SUV Analyzer - Bun + HTML/JS + Python Backend",
+  "main": "server.ts",
+  "scripts": {
+    "start": "bun run server.ts",
+    "dev": "bun --watch server.ts"
+  },
+  "keywords": [
+    "medical",
+    "dicom",
+    "pet",
+    "ct",
+    "suv",
+    "quality-control"
+  ],
+  "author": "Dr. Christian Bracco",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "bun-types": "latest"
+  }
+}
