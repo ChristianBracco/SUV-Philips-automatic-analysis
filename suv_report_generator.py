@@ -42,7 +42,7 @@ class HTMLReportGenerator:
     {self._generate_nema_pet_section()}
     {self._generate_ct_section()}
     {self._generate_nema_ct_section()}
-    {self._generate_secondary_captures_section()}
+    {self._generate_conclusions_section()}
     {self._generate_footer()}
     {self._generate_javascript()}
 </body>
@@ -242,17 +242,18 @@ class HTMLReportGenerator:
         }
         
         .data-table th {
-            padding: 15px;
+            padding: 8px 10px;
             text-align: left;
             font-weight: 600;
             text-transform: uppercase;
-            font-size: 0.9em;
-            letter-spacing: 1px;
+            font-size: 0.75em;
+            letter-spacing: 0.5px;
         }
         
         .data-table td {
-            padding: 12px 15px;
+            padding: 6px 10px;
             border-bottom: 1px solid var(--bg-light);
+            font-size: 0.85em;
         }
         
         .data-table tbody tr:hover {
@@ -395,6 +396,11 @@ class HTMLReportGenerator:
         }
         
         @media print {
+            @page {
+                size: A4 portrait;
+                margin: 12mm 10mm;
+            }
+            
             * {
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
@@ -404,6 +410,8 @@ class HTMLReportGenerator:
                 background: white !important;
                 padding: 0 !important;
                 margin: 0 !important;
+                font-size: 9pt !important;
+                line-height: 1.3 !important;
             }
             
             .toolbar {
@@ -419,47 +427,176 @@ class HTMLReportGenerator:
                 border-radius: 0 !important;
             }
             
+            /* HEADER COMPATTO */
             .header {
                 page-break-after: avoid;
                 page-break-inside: avoid;
                 background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%) !important;
+                padding: 10mm 6mm !important;
+                margin-bottom: 4mm !important;
+            }
+            
+            .header h1 {
+                font-size: 16pt !important;
+                margin: 0 0 3mm 0 !important;
+            }
+            
+            .header .subtitle {
+                font-size: 10pt !important;
+                margin: 0 !important;
+            }
+            
+            .header .institution {
+                margin-top: 4mm !important;
+                padding: 4mm !important;
+                font-size: 9pt !important;
             }
             
             .header::before {
                 display: none !important;
             }
             
+            /* SUMMARY CARDS 3 COLONNE */
             .summary {
                 page-break-inside: avoid;
+                grid-template-columns: repeat(3, 1fr) !important;
+                padding: 4mm !important;
+                gap: 3mm !important;
+                margin-bottom: 4mm !important;
             }
             
+            .summary-card {
+                padding: 3mm !important;
+                margin: 0 !important;
+            }
+            
+            .summary-card .label {
+                font-size: 8pt !important;
+                margin-bottom: 2mm !important;
+            }
+            
+            .summary-card .value {
+                font-size: 14pt !important;
+            }
+            
+            .summary-card .unit {
+                font-size: 10pt !important;
+            }
+            
+            /* SEZIONI */
             .section {
                 page-break-before: auto;
                 page-break-inside: avoid;
-                margin-bottom: 10px !important;
+                margin-bottom: 5mm !important;
+                padding: 0 4mm !important;
             }
             
             .section-title {
                 page-break-after: avoid;
+                font-size: 11pt !important;
+                padding: 3mm !important;
+                margin-bottom: 3mm !important;
             }
             
+            .section-title .icon {
+                width: 24px !important;
+                height: 24px !important;
+                font-size: 11pt !important;
+            }
+            
+            /* GRAFICI - RIDUCI SOLO ALTEZZA MASSIMA */
             .chart-container {
                 page-break-inside: avoid;
-                margin-bottom: 15px !important;
+                margin-bottom: 4mm !important;
+                padding: 3mm !important;
             }
             
+            .chart-title {
+                font-size: 10pt !important;
+                margin-bottom: 3mm !important;
+            }
+            
+            .chart-container img {
+                max-width: 100% !important;
+                height: auto !important;
+                max-height: 80mm !important;
+            }
+            
+            /* TABELLE */
             .data-table {
-                page-break-inside: avoid;
-                font-size: 9px !important;
+                page-break-inside: auto;
+                font-size: 7pt !important;
+                margin-bottom: 4mm !important;
+            }
+            
+            .data-table th {
+                padding: 2mm 3mm !important;
+                font-size: 7pt !important;
+            }
+            
+            .data-table td {
+                padding: 1mm 3mm !important;
+                font-size: 7pt !important;
+                line-height: 1.2 !important;
             }
             
             .data-table thead {
                 background: linear-gradient(135deg, #2c3e50, #3498db) !important;
             }
             
+            /* CARD */
+            .card {
+                padding: 4mm !important;
+                margin-bottom: 4mm !important;
+            }
+            
+            /* FOOTER */
             .footer {
                 page-break-before: auto;
-                margin-top: 15px !important;
+                margin-top: 5mm !important;
+                padding: 3mm 4mm !important;
+                font-size: 7pt !important;
+                border-top: 1px solid #ccc !important;
+            }
+            
+            /* EVITA BREAK IMMAGINI */
+            img {
+                page-break-inside: avoid;
+                page-break-after: avoid;
+            }
+            
+            /* CONCLUSIONI */
+            h2 {
+                font-size: 12pt !important;
+                margin: 3mm 0 !important;
+            }
+            
+            h3 {
+                font-size: 10pt !important;
+                margin: 2mm 0 !important;
+            }
+            
+            p, li {
+                font-size: 8pt !important;
+                line-height: 1.3 !important;
+                margin: 1mm 0 !important;
+            }
+            
+            ul {
+                margin: 2mm 0 !important;
+                padding-left: 5mm !important;
+            }
+            
+            input[type="text"],
+            input[type="date"],
+            input[type="checkbox"] {
+                border: 1px solid #999 !important;
+                padding: 1mm !important;
+                font-size: 8pt !important;
+            }
+            
+            label {
+                font-size: 8pt !important;
             }
         }
         
@@ -499,6 +636,31 @@ class HTMLReportGenerator:
         """Genera header del report"""
         now = datetime.now().strftime("%d/%m/%Y %H:%M")
         
+        # Estrai metadata acquisizione
+        metadata = self.analyzer.acquisition_metadata
+        institution = metadata.get('institution', 'Unknown') if metadata else 'Unknown'
+        study_date_raw = metadata.get('study_date', '') if metadata else ''
+        study_time_raw = metadata.get('study_time', '') if metadata else ''
+        activity_mbq = metadata.get('injected_activity_mbq', None) if metadata else None
+        
+        # Formatta data DICOM (YYYYMMDD -> DD/MM/YYYY)
+        if study_date_raw and len(study_date_raw) == 8:
+            study_date = f"{study_date_raw[6:8]}/{study_date_raw[4:6]}/{study_date_raw[0:4]}"
+        else:
+            study_date = study_date_raw or 'N/A'
+        
+        # Formatta ora DICOM (HHMMSS.ffffff -> HH:MM:SS)
+        if study_time_raw and len(study_time_raw) >= 6:
+            study_time = f"{study_time_raw[0:2]}:{study_time_raw[2:4]}:{study_time_raw[4:6]}"
+        else:
+            study_time = study_time_raw[:8] if study_time_raw else 'N/A'
+        
+        # Formatta attività
+        if activity_mbq is not None:
+            activity_str = f"{activity_mbq:.1f} MBq"
+        else:
+            activity_str = 'N/A'
+        
         return f"""
     <div class="container">
         <div class="header">
@@ -508,7 +670,15 @@ class HTMLReportGenerator:
                 <div><strong>{self.config['department']}</strong></div>
                 <div>{self.config['institution']}</div>
                 <div>Responsabile: {self.config['specialist']}</div>
-                <div style="margin-top: 10px; opacity: 0.8;">Report generato: {now}</div>
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.3);">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.9em;">
+                        <div><strong>Ospedale:</strong> {institution}</div>
+                        <div><strong>Data acquisizione:</strong> {study_date}</div>
+                        <div><strong>Ora scansione:</strong> {study_time}</div>
+                        <div><strong>Attività:</strong> {activity_str}</div>
+                    </div>
+                </div>
+                <div style="margin-top: 10px; opacity: 0.8; font-size: 0.85em;">Report generato: {now}</div>
             </div>
         </div>
         """
@@ -546,13 +716,8 @@ class HTMLReportGenerator:
             </div>
             
             <div class="summary-card">
-                <div class="label">Secondary Captures</div>
-                <div class="value">{num_sc}</div>
-            </div>
-            
-            <div class="summary-card">
                 <div class="label">SUV Medio</div>
-                <div class="value">{avg_suv:.2f}<span class="unit">g/mL</span></div>
+                <div class="value">{avg_suv:.2f}<span class="unit"></span></div>
             </div>
             
             <div class="summary-card">
@@ -753,7 +918,7 @@ class HTMLReportGenerator:
         """
     
     def _generate_nema_pet_section(self):
-        """Genera sezione analisi NEMA PET (griglia 15x15)"""
+        """Genera sezione analisi NEMA PET (griglia 25x25)"""
         if 'pet' not in self.nema_results:
             return ""
         
@@ -796,7 +961,7 @@ class HTMLReportGenerator:
         <div class="section">
             <div class="section-title">
                 <div class="icon">🔬</div>
-                <div>Analisi NEMA PET - Uniformità Quantitativa (Griglia 15×15)</div>
+                <div>Analisi NEMA PET - Uniformità Quantitativa (Griglia 25×25)</div>
             </div>
             
             <div class="summary" style="padding: 0; margin-bottom: 30px;">
@@ -830,7 +995,7 @@ class HTMLReportGenerator:
             </div>
             
             <div class="chart-container">
-                <div class="chart-title">🎯 Esempio Griglia 15×15 ROI</div>
+                <div class="chart-title">🎯 Esempio Griglia 25×25 ROI</div>
                 <img src="data:image/png;base64,{nema_pet.get('plot_example', '')}" 
                      style="width: 100%; max-width: 800px; height: auto; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges;" 
                      alt="Esempio griglia PET">
@@ -862,7 +1027,7 @@ class HTMLReportGenerator:
                     <li>Coefficiente di Variazione (CV) &lt; {self.config.get('cv_ct_upper', 15.0)}%</li>
                     <li>Non-Uniformità (NU): {self.config.get('nu_pet_lower', -15.0)}% &lt; NU &lt; {self.config.get('nu_pet_upper', 15.0)}%</li>
                     <li>Valutazione esclude prime 5 e ultime 5 slices</li>
-                    <li>Griglia 15×15 con celle 4×4 pixel</li>
+                    <li>Griglia 25×25 con celle variabili (NEMA NU 2-2012)</li>
                 </ul>
             </div>
         </div>
@@ -1023,111 +1188,106 @@ class HTMLReportGenerator:
         </div>
         """
     
+    
+    def _generate_conclusions_section(self):
+        """Genera sezione conclusioni normative D.Lgs 101/2020"""
+        return f"""
+        <!-- Conclusioni Normative -->
+        <div class="section">
+            <h2>📋 Conclusioni</h2>
+            <div class="card card-break" style="page-break-inside:avoid">
+                <p style="font-size:13px;color:#475569;margin-bottom:4px">Note:</p>
+                <div contenteditable="true" style="border:1px solid #e2e8f0;border-radius:4px;
+                     min-height:48px;padding:8px;font-size:13px;color:#1e293b;margin-bottom:18px"
+                     data-placeholder="(inserire note)"></div>
+                
+                <h3 style="margin-top:24px;margin-bottom:12px">Giudizi Normativi</h3>
+                
+                <p style="margin-bottom:10px;font-size:13px;color:#475569">
+                    Giudizio sulla qualità tecnica delle attrezzature medico-radiologiche ai sensi dell'art.163 comma 5 del D.Lgs 31.07.2020 n.101:
+                </p>
+                <div style="display:flex;gap:32px;margin-bottom:14px;font-size:13px">
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                        <input type="checkbox" style="width:14px;height:14px"> adeguato
+                    </label>
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                        <input type="checkbox" style="width:14px;height:14px"> non adeguato
+                    </label>
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                        <input type="checkbox" style="width:14px;height:14px"> adeguato con limitazioni
+                    </label>
+                </div>
+                
+                <div style="display:flex;justify-content:flex-end;margin-bottom:24px">
+                    <div style="text-align:center">
+                        <div style="font-size:12px;color:#64748b;margin-bottom:4px">Lo Specialista in fisica medica</div>
+                        <div contenteditable="true" style="border-bottom:1px solid #94a3b8;
+                             min-width:220px;padding:4px 8px;font-size:13px;text-align:center;color:#1e293b"
+                             data-placeholder="Nome e firma">Dr. Christian Bracco</div>
+                    </div>
+                </div>
+                
+                <p style="margin-bottom:10px;font-size:13px;color:#475569">
+                    Giudizio di idoneità sull'uso clinico delle attrezzature medico-radiologiche ai sensi dell'art.163 comma 6 del D.Lgs 31.07.2020 n.101:
+                </p>
+                <div style="display:flex;gap:32px;margin-bottom:14px;font-size:13px">
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                        <input type="checkbox" style="width:14px;height:14px"> idoneo
+                    </label>
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                        <input type="checkbox" style="width:14px;height:14px"> non idoneo
+                    </label>
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                        <input type="checkbox" style="width:14px;height:14px"> idoneo con limitazioni
+                    </label>
+                </div>
+                
+                <p style="margin-bottom:10px;font-size:13px;color:#475569">
+                    Verifica del mantenimento dei criteri specifici di accettabilità dell'attrezzatura ai sensi dell'art.163 comma 10 del D.Lgs 31.07.2020 n.101:
+                </p>
+                <div style="display:flex;gap:32px;margin-bottom:18px;font-size:13px">
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                        <input type="checkbox" style="width:14px;height:14px"> sì
+                    </label>
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                        <input type="checkbox" style="width:14px;height:14px"> no
+                    </label>
+                </div>
+                
+                <p style="font-size:13px;color:#475569;margin-bottom:4px">
+                    Opportuni interventi correttivi ai sensi dell'art.163 comma 12 del D.Lgs 31.07.2020 n.101:
+                </p>
+                <div contenteditable="true" style="border:1px solid #e2e8f0;border-radius:4px;
+                     min-height:48px;padding:8px;font-size:13px;color:#1e293b;margin-bottom:18px"
+                     data-placeholder="(inserire interventi correttivi se necessari)"></div>
+                
+                <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:16px">
+                    <div>
+                        <span style="font-size:13px;color:#475569">Data: </span>
+                        <span contenteditable="true" style="border-bottom:1px solid #94a3b8;
+                              min-width:120px;display:inline-block;padding:2px 8px;
+                              font-size:13px;color:#1e293b">{datetime.now().strftime("%d/%m/%Y")}</span>
+                    </div>
+                    <div style="text-align:center">
+                        <div style="font-size:12px;color:#64748b;margin-bottom:4px">Il Responsabile dell'impianto radiologico</div>
+                        <div contenteditable="true" style="border-bottom:1px solid #94a3b8;
+                             min-width:220px;padding:4px 8px;font-size:13px;text-align:center;color:#1e293b"
+                             data-placeholder="Nome e firma"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        """
+    
     def _generate_footer(self):
-        """Genera footer con riferimenti normativi e firme editabili"""
+        """Genera footer informativo"""
         now = datetime.now().strftime("%d/%m/%Y alle %H:%M:%S")
         
         return f"""
-        <!-- Riferimenti Normativi -->
-        <div class="section">
-            <h2>📚 Riferimenti Normativi e Linee Guida</h2>
-            <div class="card">
-                <h3 style="color: #2c3e50; margin-top: 0;">Normativa Nazionale</h3>
-                <ul style="line-height: 1.8;">
-                    <li><strong>D.Lgs. 31 luglio 2020, n. 101</strong><br>
-                        <em>"Attuazione della direttiva 2013/59/Euratom, che stabilisce norme fondamentali di sicurezza relative alla protezione contro i pericoli derivanti dall'esposizione alle radiazioni ionizzanti"</em><br>
-                        Art. 136 - Responsabilità e compiti dell'esperto di fisica medica</li>
-                    
-                    <li><strong>D.Lgs. 26 maggio 2000, n. 187</strong><br>
-                        <em>"Attuazione della direttiva 97/43/Euratom in materia di protezione sanitaria delle persone contro i pericoli delle radiazioni ionizzanti connesse ad esposizioni mediche"</em></li>
-                </ul>
-                
-                <h3 style="color: #2c3e50; margin-top: 20px;">Standard Tecnici</h3>
-                <ul style="line-height: 1.8;">
-                    <li><strong>NEMA NU 2-2012</strong><br>
-                        <em>"Performance Measurements of Positron Emission Tomographs"</em><br>
-                        National Electrical Manufacturers Association</li>
-                    
-                    <li><strong>IAEA Human Health Series No. 1</strong><br>
-                        <em>"Quality Assurance for PET and PET/CT Systems"</em><br>
-                        International Atomic Energy Agency, 2009</li>
-                </ul>
-            </div>
-        </div>
-        
-        <!-- Sezione Firme Editabili -->
-        <div class="section">
-            <h2>✍️ Validazione e Approvazione</h2>
-            <div class="card">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 20px;">
-                    <!-- Firma Specialista Fisica Medica -->
-                    <div style="border: 2px solid #3498db; padding: 20px; border-radius: 10px; background: #ecf0f1;">
-                        <h4 style="color: #2c3e50; margin-top: 0;">👨‍⚕️ Specialista in Fisica Medica</h4>
-                        <p style="margin: 10px 0; font-size: 0.9em; color: #7f8c8d;">
-                            D.Lgs. 101/2020 Art. 136<br>
-                            Esperto di Fisica Medica
-                        </p>
-                        <div style="margin: 15px 0;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Nome e Cognome:</label>
-                            <input type="text" id="firma_sfm_nome" 
-                                   placeholder="Dr./Dr.ssa ..." 
-                                   style="width: 100%; padding: 10px; border: 1px solid #bdc3c7; border-radius: 5px; font-size: 14px;"
-                                   value="Dr. Christian Bracco">
-                        </div>
-                        <div style="margin: 15px 0;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Data Verifica:</label>
-                            <input type="date" id="firma_sfm_data"
-                                   style="width: 100%; padding: 10px; border: 1px solid #bdc3c7; border-radius: 5px; font-size: 14px;"
-                                   value="{datetime.now().strftime('%Y-%m-%d')}">
-                        </div>
-                        <div style="margin: 15px 0;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Firma:</label>
-                            <input type="text" id="firma_sfm_firma"
-                                   placeholder="Firma digitale o manoscritta"
-                                   style="width: 100%; padding: 10px; border: 1px solid #bdc3c7; border-radius: 5px; font-size: 14px; font-family: 'Brush Script MT', cursive;">
-                        </div>
-                    </div>
-                    
-                    <!-- Firma RIR -->
-                    <div style="border: 2px solid #27ae60; padding: 20px; border-radius: 10px; background: #ecf0f1;">
-                        <h4 style="color: #2c3e50; margin-top: 0;">🏥 Responsabile Impianto Radiologico</h4>
-                        <p style="margin: 10px 0; font-size: 0.9em; color: #7f8c8d;">
-                            D.Lgs. 101/2020 Art. 129<br>
-                            Responsabilità Clinica
-                        </p>
-                        <div style="margin: 15px 0;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Nome e Cognome:</label>
-                            <input type="text" id="firma_rir_nome"
-                                   placeholder="Dr./Dr.ssa ..."
-                                   style="width: 100%; padding: 10px; border: 1px solid #bdc3c7; border-radius: 5px; font-size: 14px;">
-                        </div>
-                        <div style="margin: 15px 0;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Data Approvazione:</label>
-                            <input type="date" id="firma_rir_data"
-                                   style="width: 100%; padding: 10px; border: 1px solid #bdc3c7; border-radius: 5px; font-size: 14px;">
-                        </div>
-                        <div style="margin: 15px 0;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Firma:</label>
-                            <input type="text" id="firma_rir_firma"
-                                   placeholder="Firma digitale o manoscritta"
-                                   style="width: 100%; padding: 10px; border: 1px solid #bdc3c7; border-radius: 5px; font-size: 14px; font-family: 'Brush Script MT', cursive;">
-                        </div>
-                    </div>
-                </div>
-                
-                <div style="margin-top: 30px; padding: 15px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 5px;">
-                    <p style="margin: 0; font-size: 0.9em; color: #856404;">
-                        <strong>ℹ️ Nota:</strong> Il presente report costituisce documentazione del controllo di qualità eseguito secondo le procedure operative standard dell'istituzione. 
-                        Le firme digitali o manuali certificano la validità tecnica e clinica delle misure effettuate.
-                    </p>
-                </div>
-            </div>
-        </div>
-        
         <!-- Footer Informativo -->
         <div class="footer">
             <div>
-                <strong>SUV Analyzer v1.0</strong> - Sistema di Analisi Quantitativa PET/CT<br>
+                <strong>SUV Analyzer v3.3</strong> - Sistema di Analisi Quantitativa PET/CT<br>
                 {self.config['department']}<br>
                 {self.config['institution']}
             </div>
@@ -1198,7 +1358,7 @@ class HTMLReportGenerator:
                             grace: '10%',
                             title: {
                                 display: true,
-                                text: 'SUV (g/mL)',
+                                text: 'SUV ()',
                                 font: {
                                     size: 14,
                                     weight: 'bold'
@@ -1367,7 +1527,7 @@ class HTMLReportGenerator:
                             grace: '10%',
                             title: {
                                 display: true,
-                                text: 'SUV (g/mL)',
+                                text: 'SUV ()',
                                 font: {
                                     size: 14,
                                     weight: 'bold'

@@ -14,6 +14,10 @@ matplotlib.use('Agg')  # Backend non-interattivo
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import base64
+import warnings
+
+# Sopprimi warning matplotlib tight_layout
+warnings.filterwarnings('ignore', category=UserWarning, module='matplotlib')
 
 
 # ============================================================================
@@ -48,22 +52,88 @@ def setup_modern_style():
 
 
 # ============================================================================
+# LUT RAINBOW2 (PHILIPS)
+# ============================================================================
+
+def load_rainbow2_lut(lut_path='luts/Rainbow2.cm'):
+    """
+    Carica LUT Rainbow2 da file .cm Philips
+    
+    Returns:
+        numpy array (256, 3) con colori RGB [0-255]
+    """
+    import os
+    
+    # Percorso relativo allo script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    full_path = os.path.join(script_dir, lut_path)
+    
+    colors = []
+    try:
+        with open(full_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith('#') and len(line) == 7:
+                    # Parse hex color
+                    r = int(line[1:3], 16)
+                    g = int(line[3:5], 16)
+                    b = int(line[5:7], 16)
+                    colors.append([r, g, b])
+    except FileNotFoundError:
+        # Fallback: jet colormap
+        print(f"Warning: Rainbow2.cm not found, using matplotlib jet")
+        import matplotlib.cm as cm
+        jet = cm.get_cmap('jet', 256)
+        colors = (jet(np.linspace(0, 1, 256))[:, :3] * 255).astype(np.uint8)
+        return colors
+    
+    return np.array(colors[:256], dtype=np.uint8)
+
+
+def apply_rainbow2_lut(img_gray, lut=None):
+    """
+    Applica LUT Rainbow2 a immagine grayscale
+    
+    Args:
+        img_gray: Immagine grayscale uint8 (0-255)
+        lut: LUT RGB (256, 3), se None carica Rainbow2
+        
+    Returns:
+        Immagine RGB con LUT applicata
+    """
+    if lut is None:
+        lut = load_rainbow2_lut()
+    
+    # Assicura uint8
+    if img_gray.dtype != np.uint8:
+        img_gray = cv2.normalize(img_gray, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+    
+    # Applica LUT
+    img_rgb = lut[img_gray]
+    
+    return img_rgb
+
+
+# ============================================================================
 # CLASSE PRINCIPALE NEMA ANALYSIS
 # ============================================================================
 
 class NEMAAnalysis:
     """Analisi omogeneità secondo NEMA 94 con plot moderni"""
     
-    def __init__(self, results_data, modality='PT', grid_size=4):
+    def __init__(self, results_data, modality='PT', grid_size=None):
         """
         Args:
             results_data: Lista risultati da SUVAnalyzer
             modality: 'PT' o 'CT'
-            grid_size: Dimensione griglia (default 4x4, NEMA usa 15x15)
+            grid_size: Dimensione griglia (default 25x25 per PET, 15x15 per CT secondo NEMA)
         """
+        # Set default grid size based on modality
+        if grid_size is None:
+            grid_size = 25 if modality == 'PT' else 15
         self.results_data = results_data
         self.modality = modality
-        self.grid_size = grid_size
+        self.grid_size = grid_size  # NEMA standard: 15x15
         self.slice_data = []
         
         # Setup stile moderno
@@ -106,17 +176,21 @@ class NEMAAnalysis:
                     image = cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
                 else:
                     image = img
-                img_with_grid = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+                
+                # APPLICA LUT RAINBOW2 PER PET
+                if self.modality == 'PT':
+                    img_with_grid = apply_rainbow2_lut(image)
+                else:
+                    img_with_grid = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
             else:
                 img_with_grid = img.copy()
             
-            # GRIGLIA NEMA: calcola dimensioni in base al radius
-            # ROI size: 1/10 del diametro del fantoccio (NEMA standard)
-            roi_size = max(int(radius * 0.1), 6)  # min 6x6 pixel
+            # GRIGLIA NEMA 15x15: ROI più piccole e distribuite
+            # ROI size: per griglia 15x15, usa celle più piccole
+            roi_size = max(int(radius * 0.05), 4)  # 5% del radius, min 4x4 pixel
             
-            # Spacing: distribuisci le ROI uniformemente
-            # Per grid 4x4, copri circa il 75% del diametro
-            grid_span = int(radius * 1.5)  # 150% del radius = copre tutto il disco
+            # Spacing: copri tutto il disco
+            grid_span = int(radius * 1.8)  # 180% del radius per coprire bene
             spacing = grid_span // self.grid_size
             
             # Centro griglia
@@ -335,7 +409,7 @@ class NEMAAnalysis:
         Crea plot combinato CV e NU con stile moderno
         Layout: 2 subplot affiancati con stile dark/neon
         """
-        fig = plt.figure(figsize=(16, 6))
+        fig = plt.figure(figsize=(12, 5), dpi=120)  # Dimensioni normali per HTML
         gs = GridSpec(1, 2, figure=fig, wspace=0.3)
         
         # Colori moderni
@@ -357,10 +431,18 @@ class NEMAAnalysis:
         ax1.axhline(cv_mean, color='#FFD700', linestyle='--', 
                    linewidth=2, alpha=0.7, label=f'CV medio = {cv_mean:.2f}%')
         
-        ax1.set_xlabel('Instance Number', fontsize=12, fontweight='bold')
+        ax1.set_xlabel('Numero Fetta', fontsize=12, fontweight='bold')
         ax1.set_ylabel('CV (%)', fontsize=12, fontweight='bold')
         ax1.set_title(f'Coefficient of Variation - {modality} Images', 
                      fontsize=14, fontweight='bold', color='#4FC3F7', pad=15)
+        
+        # FIX: Limiti asse Y ragionevoli (0-10% per PET, 0-5% per CT)
+        cv_max = max(CV)
+        if modality == 'PT':
+            ax1.set_ylim(0, max(10, cv_max * 1.2))
+        else:  # CT
+            ax1.set_ylim(0, max(5, cv_max * 1.2))
+        
         ax1.legend(loc='upper right', fontsize=10)
         ax1.grid(True, alpha=0.3)
         
@@ -385,14 +467,18 @@ class NEMAAnalysis:
         ax2.axhline(15, color='yellow', linestyle='--', linewidth=1.5, alpha=0.6)
         ax2.axhline(-15, color='yellow', linestyle='--', linewidth=1.5, alpha=0.6)
         
-        ax2.set_xlabel('Instance Number', fontsize=12, fontweight='bold')
+        ax2.set_xlabel('Numero Fetta', fontsize=12, fontweight='bold')
         ax2.set_ylabel('Non-Uniformity (%)', fontsize=12, fontweight='bold')
         ax2.set_title(f'Non-Uniformity (NUmax & NUmin) - {modality} Images', 
                      fontsize=14, fontweight='bold', color='#4FC3F7', pad=15)
+        
+        # FIX: Limiti asse Y ragionevoli (±20% range fisso per leggibilità)
+        ax2.set_ylim(-20, 20)
+        
         ax2.legend(loc='upper right', fontsize=10)
         ax2.grid(True, alpha=0.3)
         
-        plt.tight_layout()
+        # plt.tight_layout()  # Commentato - causa warning con alcuni layout
         
         # Salva in buffer
         buf = BytesIO()
@@ -418,7 +504,7 @@ class NEMAAnalysis:
         n_images = len(images_to_show)
         
         # Layout 2 righe x 3 colonne
-        fig = plt.figure(figsize=(18, 12))
+        fig = plt.figure(figsize=(12, 14), dpi=120)  # Dimensioni normali per HTML
         gs = GridSpec(2, 3, figure=fig, hspace=0.3, wspace=0.2)
         
         for idx, img_data in enumerate(images_to_show):
@@ -441,7 +527,7 @@ class NEMAAnalysis:
         fig.suptitle(f'{modality} NEMA Analysis - ROI Gallery', 
                     fontsize=16, fontweight='bold', color='#4FC3F7', y=0.98)
         
-        plt.tight_layout(rect=[0, 0, 1, 0.96])
+        # plt.tight_layout(rect=[0, 0, 1, 0.96])  # Commentato - causa warning
         
         # Salva in buffer
         buf = BytesIO()

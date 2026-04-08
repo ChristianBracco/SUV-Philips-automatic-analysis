@@ -1,0 +1,14 @@
+# SUV Analyzer v3.3 - Python Dependencies
+# Installazione: pip install -r requirements.txt --break-system-packages
+
+# Core dependencies (già presenti)
+numpy>=1.20.0
+opencv-python>=4.5.0
+pydicom>=2.3.0
+matplotlib>=3.5.0
+
+# PDF generation (NUOVO)
+weasyprint>=60.0
+
+# Optional: fallback PDF generation
+# pdfkit>=1.0.0  # Richiede wkhtmltopdf installato separatamente

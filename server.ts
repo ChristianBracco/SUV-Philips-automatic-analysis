@@ -187,12 +187,13 @@ serve({
     if (path === '/api/load-series' && req.method === 'POST') {
       try {
         const body = await req.json();
-        const { seriesUid, folderPath } = body;
+        const { seriesUid, folderPath, lutName = 'Rainbow2' } = body;
         
-        // Chiama Python per caricare serie
+        // Chiama Python per caricare serie con LUT selezionata
         const result = await runPython('api_load_series.py', [
           folderPath,
-          seriesUid
+          seriesUid,
+          lutName
         ]);
         
         return new Response(JSON.stringify(result), {
@@ -235,6 +236,87 @@ serve({
         
         return new Response(JSON.stringify(result), {
           headers: { 'Content-Type': 'application/json' }
+        });
+        
+      } catch (error: any) {
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
+    
+    // POST /api/compare - Confronta sessioni QC
+    if (path === '/api/compare' && req.method === 'POST') {
+      try {
+        const body = await req.json();
+        const { sessionIds } = body;
+        
+        if (!sessionIds || !Array.isArray(sessionIds) || sessionIds.length < 2) {
+          return new Response(JSON.stringify({ 
+            error: 'Servono almeno 2 session IDs' 
+          }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+        
+        const result = await runPython('api_compare.py', sessionIds.map(String));
+        
+        return new Response(JSON.stringify(result), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+      } catch (error: any) {
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
+    
+    // GET /api/list-sessions - Lista sessioni QC
+    if (path === '/api/list-sessions' && req.method === 'GET') {
+      try {
+        const result = await runPython('qc_database.py', ['list', '--limit', '100']);
+        
+        // qc_database.py list non ritorna JSON, quindi facciamo query diretta
+        const { QCDatabase } = await import('./qc_database.py');
+        
+        // Alternativa: usa script dedicato
+        const listScript = `
+from qc_database import QCDatabase
+import json
+db = QCDatabase()
+sessions = db.get_all_sessions(limit=100)
+print(json.dumps({'success': True, 'sessions': sessions}))
+        `.trim();
+        
+        // Esegui script Python inline
+        const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+        const { spawn } = await import('child_process');
+        
+        return new Promise((resolve) => {
+          const proc = spawn(pythonCmd, ['-c', listScript]);
+          let stdout = '';
+          
+          proc.stdout.on('data', (data: Buffer) => {
+            stdout += data.toString();
+          });
+          
+          proc.on('close', () => {
+            try {
+              const data = JSON.parse(stdout.trim().split('\n').pop() || '{}');
+              resolve(new Response(JSON.stringify(data), {
+                headers: { 'Content-Type': 'application/json' }
+              }));
+            } catch {
+              resolve(new Response(JSON.stringify({ error: 'Parse error' }), {
+                status: 500,
+                headers: { 'Content-Type': 'application/json' }
+              }));
+            }
+          });
         });
         
       } catch (error: any) {

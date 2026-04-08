@@ -9,6 +9,8 @@ const state = {
     uploadedFolders: [],  // Array di tutte le cartelle caricate
     series: [],
     currentSeries: null,
+    currentLUT: 'Rainbow2',  // LUT corrente
+    currentSeriesForLUT: null,  // Serie corrente per reload con LUT
     images: [],
     uploadedFiles: [],
     viewer: {
@@ -221,6 +223,9 @@ async function uploadAndProcessFiles(files) {
         // MOSTRA CHECKBOX PER SELEZIONE SERIE
         showSeriesSelector();
         
+        // CARICA ANCHE LE CARD PER IL VIEWER
+        await loadAllSeries();
+        
     } catch (error) {
         console.error('💥 Errore durante upload:', error);
         showStatus('scan-status', `❌ Errore: ${error.message}`, 'error');
@@ -348,9 +353,25 @@ function createSeriesCard(series, index) {
     card.className = 'series-card';
     card.onclick = () => loadSeriesInViewer(index);
     
+    // Badge modalità con fallback
+    const modality = series.modality || 'UK';
     const modalityBadge = document.createElement('div');
-    modalityBadge.className = `modality-badge modality-${series.modality.toLowerCase()}`;
-    modalityBadge.textContent = series.modality;
+    modalityBadge.className = `modality-badge modality-${modality.toLowerCase()}`;
+    modalityBadge.textContent = modality;
+    modalityBadge.style.cssText = `
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        background: ${modality === 'PT' ? 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' : 
+                     modality === 'CT' ? 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' : '#999'};
+        color: white;
+        z-index: 10;
+    `;
     
     const title = document.createElement('div');
     title.className = 'series-card-title';
@@ -370,13 +391,50 @@ function createSeriesCard(series, index) {
 function loadSeriesInViewer(seriesIndex) {
     const series = state.series[seriesIndex];
     
-    if (!series || !series.loaded) {
-        showStatus('series-info', '❌ Serie non caricata', 'error');
+    console.log(`[VIEWER] Loading series ${seriesIndex}:`, series);
+    
+    if (!series) {
+        console.error('[VIEWER] Serie non trovata!');
+        showStatus('series-info', '❌ Serie non trovata', 'error');
         return;
     }
     
+    if (!series.loaded) {
+        console.error('[VIEWER] Serie non caricata!', series);
+        showStatus('series-info', '❌ Serie non caricata. Caricamento in corso...', 'error');
+        
+        // Prova a caricare la serie ora
+        loadSeriesImages(series, seriesIndex).then(() => {
+            console.log('[VIEWER] Serie caricata, riprovo viewer');
+            loadSeriesInViewer(seriesIndex);
+        }).catch(err => {
+            console.error('[VIEWER] Errore caricamento:', err);
+            showStatus('series-info', `❌ Errore: ${err.message}`, 'error');
+        });
+        return;
+    }
+    
+    if (!series.images || series.images.length === 0) {
+        console.error('[VIEWER] Serie senza immagini!', series);
+        showStatus('series-info', '❌ Nessuna immagine disponibile', 'error');
+        return;
+    }
+    
+    console.log(`[VIEWER] OK: ${series.images.length} immagini`);
+    
     state.currentSeries = series;
+    state.currentSeriesForLUT = seriesIndex;  // Salva per reload LUT
     state.images = series.images;
+    
+    // Mostra/nascondi selettore LUT in base a modalità
+    const lutSelector = document.getElementById('lut-selector');
+    if (lutSelector) {
+        if (series.modality === 'PT') {
+            lutSelector.style.display = 'block';
+        } else {
+            lutSelector.style.display = 'none';
+        }
+    }
     
     // Highlight selected card
     document.querySelectorAll('.series-card').forEach((card, i) => {
@@ -387,6 +445,34 @@ function loadSeriesInViewer(seriesIndex) {
     initViewer();
     
     showStatus('series-info', `✅ ${series.description} (${series.count} slices)`, '');
+}
+
+// Funzione helper per caricare immagini di una serie
+async function loadSeriesImages(series, index) {
+    console.log(`[LOAD] Caricamento serie ${index}: ${series.description}`);
+    
+    const response = await fetch('/api/load-series', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            folderPath: series.folderPath || state.uploadedFolders[0] || state.currentFolder,
+            seriesUid: series.uid,
+            lutName: state.currentLUT  // Passa LUT corrente
+        })
+    });
+    
+    const data = await response.json();
+    
+    if (data.error) {
+        throw new Error(data.error);
+    }
+    
+    series.images = data.images || [];
+    series.loaded = true;
+    
+    console.log(`[LOAD] OK: ${series.images.length} immagini caricate con LUT ${state.currentLUT}`);
+    
+    return series;
 }
 
 // ============================================================
@@ -400,8 +486,42 @@ function loadSeriesInViewer(seriesIndex) {
 function initViewer() {
     const viewerDiv = document.getElementById('dicom-viewer');
     
+    // Check se ci sono immagini
+    if (!state.images || state.images.length === 0) {
+        viewerDiv.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #999;">
+                <div style="text-align: center;">
+                    <h3>Nessuna immagine disponibile</h3>
+                    <p>Seleziona una serie dalla lista</p>
+                </div>
+            </div>
+        `;
+        console.error('[VIEWER] Nessuna immagine da mostrare');
+        return;
+    }
+    
+    console.log(`[VIEWER] Inizializzazione con ${state.images.length} immagini`);
+    
+    // Preset W/L per modalità
+    const isPET = state.currentSeries.modality === 'PT';
+    const presetButtons = isPET ? `
+        <button class="preset-btn" onclick="applyLUTPreset('rainbow2')">🌈 Rainbow2</button>
+        <button class="preset-btn" onclick="applyLUTPreset('hot')">🔥 Hot Iron</button>
+        <button class="preset-btn" onclick="applyLUTPreset('pet')">📊 PET</button>
+        <button class="preset-btn" onclick="applyLUTPreset('gray')">⬜ Grayscale</button>
+    ` : `
+        <button class="preset-btn" onclick="applyWLPreset(400, 40)">🫁 Abdomen</button>
+        <button class="preset-btn" onclick="applyWLPreset(1500, -600)">💨 Lung</button>
+        <button class="preset-btn" onclick="applyWLPreset(2000, 400)">🦴 Bone</button>
+        <button class="preset-btn" onclick="applyWLPreset(80, 40)">🧠 Brain</button>
+        <button class="preset-btn" onclick="applyWLPreset(400, 50)">💪 Soft</button>
+    `;
+    
     // Create canvas and overlays
     viewerDiv.innerHTML = `
+        <div class="viewer-presets" style="position: absolute; top: 10px; left: 10px; z-index: 100; display: flex; gap: 5px; flex-wrap: wrap; max-width: 600px;">
+            ${presetButtons}
+        </div>
         <canvas id="dicom-canvas"></canvas>
         <div class="viewer-info">
             <div id="info-series">Serie: ${state.currentSeries.description}</div>
@@ -427,18 +547,33 @@ function initViewer() {
     
     // Load images
     const imageElements = [];
+    const imageMetadata = [];
     let loadedCount = 0;
     
-    state.images.forEach((dataUrl, index) => {
+    state.images.forEach((item, index) => {
+        // Gestisci sia vecchio formato (string) che nuovo (object)
+        const dataUrl = typeof item === 'string' ? item : item.image;
+        const itemMetadata = typeof item === 'object' ? item.metadata : null;
+        
         const img = new Image();
         img.onload = () => {
             imageElements[index] = img;
+            imageMetadata[index] = itemMetadata;
             loadedCount++;
             
             if (loadedCount === state.images.length) {
                 // All images loaded
                 state.viewer.imageElements = imageElements;
+                state.viewer.imageMetadata = imageMetadata;
                 state.viewer.currentSlice = Math.floor(imageElements.length / 2);
+                
+                // Imposta W/L da metadata del primo elemento se disponibili
+                const firstMetadata = imageMetadata[0];
+                if (firstMetadata && firstMetadata.window_center && firstMetadata.window_width) {
+                    state.viewer.windowCenter = firstMetadata.window_center;
+                    state.viewer.windowWidth = firstMetadata.window_width;
+                }
+                
                 renderViewer(canvas, ctx);
                 setupViewerEvents(canvas, ctx);
             }
@@ -475,10 +610,53 @@ function renderViewer(canvas, ctx) {
     const x = (canvas.width - w) / 2 + state.viewer.panX;
     const y = (canvas.height - h) / 2 + state.viewer.panY;
     
-    // Draw
+    // Apply W/L using canvas manipulation
+    // Create temporary canvas for W/L processing
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = img.width;
+    tempCanvas.height = img.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.drawImage(img, 0, 0);
+    
+    // Get image data
+    const imageData = tempCtx.getImageData(0, 0, img.width, img.height);
+    const data = imageData.data;
+    
+    // Apply W/L transformation
+    const ww = state.viewer.windowWidth;
+    const wc = state.viewer.windowCenter;
+    const minVal = wc - ww / 2;
+    const maxVal = wc + ww / 2;
+    const range = maxVal - minVal;
+    
+    if (range > 0) {
+        for (let i = 0; i < data.length; i += 4) {
+            // Get grayscale value (assume grayscale or use average)
+            const gray = (data[i] + data[i + 1] + data[i + 2]) / 3;
+            
+            // Apply window/level
+            let newVal;
+            if (gray <= minVal) {
+                newVal = 0;
+            } else if (gray >= maxVal) {
+                newVal = 255;
+            } else {
+                newVal = ((gray - minVal) / range) * 255;
+            }
+            
+            data[i] = newVal;     // R
+            data[i + 1] = newVal; // G
+            data[i + 2] = newVal; // B
+            // Alpha unchanged
+        }
+        
+        tempCtx.putImageData(imageData, 0, 0);
+    }
+    
+    // Draw processed image
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(img, x, y, w, h);
+    ctx.drawImage(tempCanvas, x, y, w, h);
     
     // Update info
     updateViewerInfo();
@@ -638,7 +816,36 @@ async function runAnalysis() {
         
         // Show report
         const reportElement = document.getElementById('analysis-report');
-        if (data.reportHtml && data.reportHtml.length > 0) {
+        
+        // Se c'è reportUrl, mostra link al file salvato
+        if (data.reportUrl) {
+            const pdfLink = data.pdfUrl ? `
+                <a href="${data.pdfUrl}" target="_blank" 
+                   style="display: inline-block; padding: 12px 25px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); 
+                          color: white; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; margin-left: 15px;">
+                    📄 Scarica PDF
+                </a>
+            ` : '';
+            
+            reportElement.innerHTML = `
+                <div style="padding: 30px; text-align: center; background: rgba(76, 175, 80, 0.1); border-radius: 12px;">
+                    <h2 style="color: #4FC3F7; margin-bottom: 15px;">✅ Analisi Completata!</h2>
+                    <p style="margin-bottom: 20px; color: #ccc;">Report generato: ${data.ptCount} PET, ${data.ctCount} CT</p>
+                    <div>
+                        <a href="${data.reportUrl}" target="_blank" 
+                           style="display: inline-block; padding: 15px 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                                  color: white; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                            📊 Apri Report Completo
+                        </a>
+                        ${pdfLink}
+                    </div>
+                    <p style="margin-top: 15px; font-size: 12px; color: #999;">
+                        File salvati: <code style="color: #4FC3F7;">${data.reportUrl}</code>
+                        ${data.pdfUrl ? ` | <code style="color: #F093FB;">${data.pdfUrl}</code>` : ''}
+                    </p>
+                </div>
+            `;
+        } else if (data.reportHtml && data.reportHtml.length > 0) {
             // Se è solo un filename (corto), crea un link
             if (data.reportHtml.length < 100 && data.reportHtml.endsWith('.html')) {
                 reportElement.innerHTML = `
@@ -764,4 +971,385 @@ function getSelectedSeriesUIDs() {
         }
     });
     return selected;
+}
+
+// ============================================================
+// VIEWER PRESETS
+// ============================================================
+
+function applyWLPreset(window, level) {
+    console.log(`[PRESET] Applying W/L: ${window}/${level}`);
+    state.viewer.windowWidth = window;
+    state.viewer.windowCenter = level;
+    
+    // Update info display
+    const infoWL = document.getElementById('info-wl');
+    if (infoWL) {
+        infoWL.textContent = `W/L: ${window} / ${level}`;
+    }
+    
+    // Re-render
+    const canvas = document.getElementById('dicom-canvas');
+    const ctx = canvas ? canvas.getContext('2d', { alpha: false }) : null;
+    if (canvas && ctx) {
+        renderViewer(canvas, ctx);
+    }
+}
+
+function applyLUTPreset(preset) {
+    console.log(`[PRESET] Applying LUT: ${preset}`);
+    state.viewer.lutPreset = preset;
+    
+    // LUT presets per PET
+    const luts = {
+        'rainbow2': 'Rainbow2',  // Già implementato
+        'hot': 'Hot Iron',
+        'pet': 'PET',
+        'gray': 'Grayscale'
+    };
+    
+    // Update info display
+    const infoModality = document.getElementById('info-modality');
+    if (infoModality) {
+        infoModality.textContent = `Modalità: ${state.currentSeries.modality} | LUT: ${luts[preset]}`;
+    }
+    
+    // Re-render con nuovo LUT
+    const canvas = document.getElementById('dicom-canvas');
+    const ctx = canvas ? canvas.getContext('2d', { alpha: false }) : null;
+    if (canvas && ctx) {
+        renderViewer(canvas, ctx);
+    }
+}
+
+// ============================================================
+// LUT COLORMAP SWITCHING
+// ============================================================
+
+async function changeLUT() {
+    const lutSelect = document.getElementById('lut-select');
+    const newLUT = lutSelect.value;
+    
+    console.log(`[LUT] Cambiando da ${state.currentLUT} a ${newLUT}`);
+    
+    if (!state.currentSeriesForLUT && state.currentSeriesForLUT !== 0) {
+        console.error('[LUT] Nessuna serie caricata');
+        return;
+    }
+    
+    // Aggiorna LUT corrente
+    state.currentLUT = newLUT;
+    
+    // Ricarica serie con nuova LUT
+    const series = state.series[state.currentSeriesForLUT];
+    
+    // Reset loaded flag per forzare reload
+    series.loaded = false;
+    series.images = [];
+    
+    // Mostra loading
+    showStatus('series-info', `🎨 Applicando ${newLUT}...`, 'info');
+    
+    try {
+        // Ricarica immagini con nuova LUT
+        await loadSeriesImages(series, state.currentSeriesForLUT);
+        
+        // Ricarica viewer
+        loadSeriesInViewer(state.currentSeriesForLUT);
+        
+        showStatus('series-info', `✅ ${newLUT} applicata!`, 'success');
+    } catch (err) {
+        console.error('[LUT] Errore cambio LUT:', err);
+        showStatus('series-info', `❌ Errore: ${err.message}`, 'error');
+    }
+}
+
+// ============================================================
+// QC HISTORY & COMPARISON
+// ============================================================
+
+let qcHistorySessions = [];
+let selectedSessionsForComparison = [];
+
+async function loadQCHistory() {
+    showStatus('history-table', '⏳ Caricamento storico...', 'info');
+    
+    try {
+        const response = await fetch('/api/list-sessions');
+        const data = await response.json();
+        
+        if (!data.success) {
+            throw new Error(data.error || 'Errore caricamento storico');
+        }
+        
+        qcHistorySessions = data.sessions || [];
+        renderHistoryTable();
+        
+        showStatus('history-table', `✅ ${qcHistorySessions.length} sessioni caricate`, 'success');
+        
+    } catch (error) {
+        console.error('Errore caricamento storico:', error);
+        showStatus('history-table', `❌ Errore: ${error.message}`, 'error');
+    }
+}
+
+function renderHistoryTable() {
+    const container = document.getElementById('history-table');
+    
+    if (qcHistorySessions.length === 0) {
+        container.innerHTML = '<p style="color: #999;">Nessuna sessione QC nel database.</p>';
+        return;
+    }
+    
+    let html = `
+        <table style="width: 100%; border-collapse: collapse; background: rgba(255,255,255,0.05);">
+            <thead>
+                <tr style="background: rgba(79, 195, 247, 0.2); border-bottom: 2px solid #4FC3F7;">
+                    <th style="padding: 12px; text-align: left;">
+                        <input type="checkbox" onchange="toggleAllSessions(this.checked)">
+                    </th>
+                    <th style="padding: 12px; text-align: left;">ID</th>
+                    <th style="padding: 12px; text-align: left;">Data/Ora</th>
+                    <th style="padding: 12px; text-align: left;">Scanner</th>
+                    <th style="padding: 12px; text-align: center;">PET Slices</th>
+                    <th style="padding: 12px; text-align: center;">CT Slices</th>
+                    <th style="padding: 12px; text-align: center;">Report</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    qcHistorySessions.forEach((session, idx) => {
+        const bgColor = idx % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.05)';
+        const timestamp = session.timestamp ? session.timestamp.substring(0, 16).replace('T', ' ') : 'N/A';
+        
+        html += `
+            <tr style="background: ${bgColor}; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                <td style="padding: 10px;">
+                    <input type="checkbox" class="session-checkbox" data-session-id="${session.id}" 
+                           onchange="toggleSessionSelection(${session.id}, this.checked)">
+                </td>
+                <td style="padding: 10px; color: #4FC3F7;">${session.id}</td>
+                <td style="padding: 10px;">${timestamp}</td>
+                <td style="padding: 10px;">${session.scanner_name || 'Unknown'}</td>
+                <td style="padding: 10px; text-align: center;">${session.pt_slices || 0}</td>
+                <td style="padding: 10px; text-align: center;">${session.ct_slices || 0}</td>
+                <td style="padding: 10px; text-align: center;">
+                    <a href="/${session.report_html_path}" target="_blank" 
+                       style="color: #4FC3F7; text-decoration: none;">📄 HTML</a>
+                    ${session.report_json_path ? 
+                        `| <a href="/${session.report_json_path}" target="_blank" 
+                            style="color: #4FC3F7; text-decoration: none;">📊 JSON</a>` : ''}
+                </td>
+            </tr>
+        `;
+    });
+    
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+function toggleAllSessions(checked) {
+    document.querySelectorAll('.session-checkbox').forEach(cb => {
+        cb.checked = checked;
+        const sessionId = parseInt(cb.dataset.sessionId);
+        if (checked) {
+            if (!selectedSessionsForComparison.includes(sessionId)) {
+                selectedSessionsForComparison.push(sessionId);
+            }
+        } else {
+            selectedSessionsForComparison = [];
+        }
+    });
+    updateCompareButton();
+}
+
+function toggleSessionSelection(sessionId, checked) {
+    if (checked) {
+        if (!selectedSessionsForComparison.includes(sessionId)) {
+            selectedSessionsForComparison.push(sessionId);
+        }
+    } else {
+        const index = selectedSessionsForComparison.indexOf(sessionId);
+        if (index > -1) {
+            selectedSessionsForComparison.splice(index, 1);
+        }
+    }
+    updateCompareButton();
+}
+
+function updateCompareButton() {
+    const count = selectedSessionsForComparison.length;
+    const button = document.querySelector('button[onclick="compareSelected()"]');
+    if (button) {
+        button.textContent = `📊 Confronta Selezionate (${count})`;
+        button.disabled = count < 2;
+        button.style.opacity = count < 2 ? '0.5' : '1';
+    }
+}
+
+async function compareSelected() {
+    if (selectedSessionsForComparison.length < 2) {
+        alert('Seleziona almeno 2 sessioni da confrontare');
+        return;
+    }
+    
+    const container = document.getElementById('comparison-results');
+    container.innerHTML = '<p style="color: #4FC3F7;">⏳ Generazione confronto...</p>';
+    
+    try {
+        const response = await fetch('/api/compare', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sessionIds: selectedSessionsForComparison
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (!data.success) {
+            throw new Error(data.error || 'Errore comparazione');
+        }
+        
+        renderComparisonResults(data);
+        
+    } catch (error) {
+        console.error('Errore comparazione:', error);
+        container.innerHTML = `<p style="color: #F44336;">❌ Errore: ${error.message}</p>`;
+    }
+}
+
+function renderComparisonResults(data) {
+    const container = document.getElementById('comparison-results');
+    
+    let html = `
+        <div style="background: rgba(79, 195, 247, 0.1); padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+            <h3 style="color: #4FC3F7; margin-top: 0;">📊 Risultati Comparazione</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                <div>
+                    <div style="font-size: 12px; color: #999;">Sessioni Confrontate</div>
+                    <div style="font-size: 24px; color: white; font-weight: bold;">
+                        ${data.statistics.sessions_count}
+                    </div>
+                </div>
+                <div>
+                    <div style="font-size: 12px; color: #999;">PET Pass Rate</div>
+                    <div style="font-size: 24px; font-weight: bold; color: ${data.statistics.pt_pass_rate >= 80 ? '#4CAF50' : '#F44336'};">
+                        ${data.statistics.pt_pass_rate.toFixed(1)}%
+                    </div>
+                </div>
+                <div>
+                    <div style="font-size: 12px; color: #999;">CT Pass Rate</div>
+                    <div style="font-size: 24px; font-weight: bold; color: ${data.statistics.ct_pass_rate >= 80 ? '#4CAF50' : '#F44336'};">
+                        ${data.statistics.ct_pass_rate.toFixed(1)}%
+                    </div>
+                </div>
+                <div>
+                    <div style="font-size: 12px; color: #999;">Trend PET CV</div>
+                    <div style="font-size: 24px; color: white; font-weight: bold;">
+                        ${data.statistics.pt_cv_trend === 'stable' ? '📊 Stabile' : '📈 Variabile'}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <h4 style="color: #4FC3F7; margin-top: 30px;">Grafici Comparativi</h4>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); gap: 20px; margin-bottom: 30px;">
+            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+                <h5 style="color: #4FC3F7; margin-top: 0;">PET - Coefficient of Variation</h5>
+                <img src="${data.charts.pt_cv_mean}" style="width: 100%; height: auto; border-radius: 4px;">
+            </div>
+            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+                <h5 style="color: #4FC3F7; margin-top: 0;">PET - Non-Uniformity Max</h5>
+                <img src="${data.charts.pt_nu_max}" style="width: 100%; height: auto; border-radius: 4px;">
+            </div>
+            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+                <h5 style="color: #4FC3F7; margin-top: 0;">CT - Coefficient of Variation</h5>
+                <img src="${data.charts.ct_cv_mean}" style="width: 100%; height: auto; border-radius: 4px;">
+            </div>
+            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+                <h5 style="color: #4FC3F7; margin-top: 0;">CT - Non-Uniformity Max</h5>
+                <img src="${data.charts.ct_nu_max}" style="width: 100%; height: auto; border-radius: 4px;">
+            </div>
+        </div>
+        
+        <h4 style="color: #4FC3F7;">Tabella Comparativa</h4>
+        <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse; background: rgba(255,255,255,0.05);">
+                <thead>
+                    <tr style="background: rgba(79, 195, 247, 0.2); border-bottom: 2px solid #4FC3F7;">
+                        <th style="padding: 12px; text-align: left;">Sessione</th>
+                        <th style="padding: 12px; text-align: left;">Scanner</th>
+                        <th style="padding: 12px; text-align: center;">PET CV</th>
+                        <th style="padding: 12px; text-align: center;">PET NU</th>
+                        <th style="padding: 12px; text-align: center;">PET Status</th>
+                        <th style="padding: 12px; text-align: center;">CT CV</th>
+                        <th style="padding: 12px; text-align: center;">CT NU</th>
+                        <th style="padding: 12px; text-align: center;">CT Status</th>
+                        <th style="padding: 12px; text-align: center;">Report</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+    
+    data.comparison_table.forEach((row, idx) => {
+        const bgColor = idx % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.05)';
+        const timestamp = row.timestamp.substring(0, 16).replace('T', ' ');
+        
+        html += `
+            <tr style="background: ${bgColor}; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                <td style="padding: 10px;">${timestamp}</td>
+                <td style="padding: 10px;">${row.scanner}</td>
+                <td style="padding: 10px; text-align: center;">${row.pt_cv_mean.toFixed(2)}</td>
+                <td style="padding: 10px; text-align: center;">${row.pt_nu_max.toFixed(2)}</td>
+                <td style="padding: 10px; text-align: center;">
+                    <span style="color: ${row.pt_pass ? '#4CAF50' : '#F44336'}; font-weight: bold;">
+                        ${row.pt_pass ? '✅ PASS' : '❌ FAIL'}
+                    </span>
+                </td>
+                <td style="padding: 10px; text-align: center;">${row.ct_cv_mean.toFixed(2)}</td>
+                <td style="padding: 10px; text-align: center;">${row.ct_nu_max.toFixed(2)}</td>
+                <td style="padding: 10px; text-align: center;">
+                    <span style="color: ${row.ct_pass ? '#4CAF50' : '#F44336'}; font-weight: bold;">
+                        ${row.ct_pass ? '✅ PASS' : '❌ FAIL'}
+                    </span>
+                </td>
+                <td style="padding: 10px; text-align: center;">
+                    <a href="/${row.html_url}" target="_blank" style="color: #4FC3F7;">📄</a>
+                </td>
+            </tr>
+        `;
+    });
+    
+    html += '</tbody></table></div>';
+    
+    container.innerHTML = html;
+}
+
+// Auto-carica storico quando si apre tab history
+function switchTab(tabName) {
+    // Nascond tutti i tab
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Rimuovi active da tutti i bottoni
+    document.querySelectorAll('.tab').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // Attiva tab selezionato
+    const tabContent = document.getElementById(`tab-${tabName}`);
+    if (tabContent) {
+        tabContent.classList.add('active');
+    }
+    
+    // Attiva bottone
+    event.target.classList.add('active');
+    
+    // Auto-load storico quando si apre tab history
+    if (tabName === 'history' && qcHistorySessions.length === 0) {
+        loadQCHistory();
+    }
 }

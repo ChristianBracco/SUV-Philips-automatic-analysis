@@ -30,6 +30,7 @@ class SUVAnalyzer:
         self.selected_series = None  # Set of selected series UIDs (None = all)
         self.secondary_captures = []
         self.config = self._load_default_config()
+        self.acquisition_metadata = {}  # Metadata acquisizione DICOM
         
     def _load_default_config(self):
         """Configurazione di default per analisi"""
@@ -106,10 +107,27 @@ class SUVAnalyzer:
                 'model': ds.ManufacturerModelName if hasattr(ds, 'ManufacturerModelName') else 'Unknown',
                 'patient_id': ds.PatientID if hasattr(ds, 'PatientID') else 'Unknown',
                 'study_date': ds.StudyDate if hasattr(ds, 'StudyDate') else 'Unknown',
+                'study_time': ds.StudyTime if hasattr(ds, 'StudyTime') else 'Unknown',
                 'series_time': ds.SeriesTime if hasattr(ds, 'SeriesTime') else 'Unknown',
+                'institution_name': ds.InstitutionName if hasattr(ds, 'InstitutionName') else 'Unknown',
                 'instance_number': int(ds.InstanceNumber) if hasattr(ds, 'InstanceNumber') else 0,
                 'dicom': ds
             }
+            
+            # Estrai attività radioattiva se PET
+            if modality == 'PT' and hasattr(ds, 'RadiopharmaceuticalInformationSequence'):
+                try:
+                    radiopharma_seq = ds.RadiopharmaceuticalInformationSequence[0]
+                    if hasattr(radiopharma_seq, 'RadionuclideTotalDose'):
+                        # Dose in Bq, converti in MBq
+                        dose_bq = float(radiopharma_seq.RadionuclideTotalDose)
+                        info['injected_activity_mbq'] = dose_bq / 1e6
+                    else:
+                        info['injected_activity_mbq'] = None
+                except (IndexError, AttributeError):
+                    info['injected_activity_mbq'] = None
+            else:
+                info['injected_activity_mbq'] = None
             
             return info
             
@@ -384,6 +402,16 @@ class SUVAnalyzer:
                     result = self.calculate_suv_from_dicom(info, self.config['roi_fraction'])
                     if result:
                         self.pt_data.append(result)
+                        
+                        # Salva metadata acquisizione dal primo file PET
+                        if not self.acquisition_metadata:
+                            self.acquisition_metadata = {
+                                'institution': info.get('institution_name', 'Unknown'),
+                                'study_date': info.get('study_date', 'Unknown'),
+                                'study_time': info.get('study_time', 'Unknown'),
+                                'injected_activity_mbq': info.get('injected_activity_mbq', None)
+                            }
+                        
                         print(f"  PET processed successfully")
                     else:
                         print(f"  PET processing returned None")
@@ -393,6 +421,16 @@ class SUVAnalyzer:
                     result = self.calculate_hu_from_dicom(info, self.config['roi_fraction'])
                     if result:
                         self.ct_data.append(result)
+                        
+                        # Salva metadata acquisizione dal primo file CT se non già salvati
+                        if not self.acquisition_metadata:
+                            self.acquisition_metadata = {
+                                'institution': info.get('institution_name', 'Unknown'),
+                                'study_date': info.get('study_date', 'Unknown'),
+                                'study_time': info.get('study_time', 'Unknown'),
+                                'injected_activity_mbq': None  # CT non ha attività
+                            }
+                        
                         print(f"  CT processed successfully")
                     else:
                         print(f"  CT processing returned None")
@@ -443,9 +481,9 @@ class SUVAnalyzer:
         
         results = {}
         
-        # Analisi PET con griglia configurabile (default 4x4)
+        # Analisi PET con griglia configurabile (default 25x25 NEMA NU 2-2012)
         if self.pt_data:
-            grid_size = self.config.get('grid_size', 4)
+            grid_size = self.config.get('grid_size', 25)  # NEMA NU 2-2012: 25x25
             print(f"Esecuzione analisi NEMA PET (griglia {grid_size}x{grid_size})...")
             nema_pt = NEMAAnalysis(self.pt_data, modality='PT', grid_size=grid_size)
             pt_slice_data, pt_plot, pt_example = nema_pt.analyze_pet_grid(example_slice_pt)
@@ -474,8 +512,8 @@ class SUVAnalyzer:
         
         return results
     
-    def generate_html_report(self, output_path='suv_report.html'):
-        """Genera report HTML interattivo"""
+    def generate_html_report(self):
+        """Genera report HTML interattivo (ritorna HTML come stringa)"""
         from suv_report_generator import HTMLReportGenerator
         
         # Esegui analisi NEMA
@@ -488,11 +526,62 @@ class SUVAnalyzer:
         generator = HTMLReportGenerator(self, nema_results)
         html_content = generator.generate()
         
-        with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(html_content)
+        print(f"\nReport HTML generato ({len(html_content)} caratteri)")
+        return html_content  # Ritorna HTML come stringa
+    
+    def export_json(self):
+        """
+        Esporta risultati analisi in formato JSON
         
-        print(f"\nReport HTML generato: {output_path}")
-        return output_path
+        Returns:
+            dict con tutti i risultati dell'analisi
+        """
+        import json
+        from datetime import datetime
+        
+        # Esegui analisi NEMA
+        nema_results = self.analyze_nema_uniformity(
+            example_slice_pt=self.config.get('example_slice_pt', 15),
+            example_slice_ct=self.config.get('example_slice_ct', 15)
+        )
+        
+        # Costruisci JSON strutturato
+        export_data = {
+            'metadata': {
+                'timestamp': datetime.now().isoformat(),
+                'software': 'SUV Analyzer v3.3',
+                'department': self.config.get('department', ''),
+                'institution': self.config.get('institution', ''),
+                'specialist': self.config.get('specialist', '')
+            },
+            'acquisition': self.acquisition_metadata,
+            'configuration': self.config,
+            'data_counts': {
+                'pt_slices': len(self.pt_data),
+                'ct_slices': len(self.ct_data)
+            },
+            'nema_results': {
+                'pt': nema_results.get('pt', {}),
+                'ct': nema_results.get('ct', {})
+            }
+        }
+        
+        # Converti numpy a native Python types
+        def convert_numpy(obj):
+            import numpy as np
+            if isinstance(obj, np.integer):
+                return int(obj)
+            elif isinstance(obj, np.floating):
+                return float(obj)
+            elif isinstance(obj, np.ndarray):
+                return obj.tolist()
+            elif isinstance(obj, dict):
+                return {k: convert_numpy(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_numpy(i) for i in obj]
+            return obj
+        
+        return convert_numpy(export_data)
 
 
 def main():

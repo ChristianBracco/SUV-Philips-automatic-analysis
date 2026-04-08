@@ -128,6 +128,22 @@
             margin-bottom: 10px;
         }
         
+        .preset-btn {
+            width: auto !important;
+            padding: 6px 12px !important;
+            font-size: 12px !important;
+            background: rgba(79, 195, 247, 0.2) !important;
+            border: 1px solid rgba(79, 195, 247, 0.4) !important;
+            backdrop-filter: blur(10px);
+        }
+        
+        .preset-btn:hover {
+            background: rgba(79, 195, 247, 0.4) !important;
+            border-color: rgba(79, 195, 247, 0.6) !important;
+            transform: translateY(0) !important;
+            box-shadow: 0 2px 8px rgba(79, 195, 247, 0.3) !important;
+        }
+        
         select {
             width: 100%;
             padding: 12px;
@@ -489,6 +505,7 @@
         <div class="tabs">
             <button class="tab active" onclick="switchTab('viewer')">🖼️ DICOM Viewer</button>
             <button class="tab" onclick="switchTab('analysis')">⚡ Analisi SUV</button>
+            <button class="tab" onclick="switchTab('history')">📊 Storico & Confronti</button>
         </div>
         
         <div id="tab-viewer" class="tab-content active">
@@ -523,19 +540,6 @@
                     
                     <div id="scan-status" class="status"></div>
                     
-                    <!-- Series Selector -->
-                    <div id="series-selector-container" class="series-selector-container" style="display: none;">
-                        <div class="series-selector-title">📋 Seleziona Serie da Analizzare</div>
-                        <div style="margin-bottom: 15px;">
-                            <button class="select-btn" onclick="selectAllSeries()">Tutte</button>
-                            <button class="select-btn" onclick="deselectAllSeries()">Nessuna</button>
-                            <button class="select-btn" onclick="selectOnlyPET()">Solo PET</button>
-                        </div>
-                        <div id="series-list">
-                            <!-- Serie vengono aggiunte dinamicamente da app.js -->
-                        </div>
-                    </div>
-                    
                     <div class="divider"></div>
                     
                     <div class="section-title">📂 Serie Caricate</div>
@@ -549,6 +553,18 @@
                 
                 <div class="viewer-container">
                     <div class="section-title">🖼️ DICOM Viewer</div>
+                    
+                    <!-- LUT Selector per PET -->
+                    <div id="lut-selector" style="display: none; margin-bottom: 15px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px;">
+                        <div style="margin-bottom: 8px; color: #4FC3F7; font-weight: bold;">🎨 Colormap PET:</div>
+                        <select id="lut-select" onchange="changeLUT()" style="width: 100%; padding: 8px; background: rgba(0,0,0,0.5); color: white; border: 1px solid #4FC3F7; border-radius: 4px; cursor: pointer;">
+                            <option value="Rainbow2">Rainbow2 (Default)</option>
+                            <option value="HotIron">Hot Iron</option>
+                            <option value="PET">PET Standard</option>
+                            <option value="Grayscale">Grayscale</option>
+                        </select>
+                    </div>
+                    
                     <div id="dicom-viewer">
                         <div class="viewer-empty">
                             <div class="viewer-empty-icon">📁</div>
@@ -566,6 +582,19 @@
                     Esegue l'analisi completa SUV e NEMA su tutti i file DICOM caricati.
                 </p>
                 
+                <!-- Series Selector -->
+                <div id="series-selector-container" class="series-selector-container" style="display: none;">
+                    <div class="series-selector-title">📋 Seleziona Serie da Analizzare</div>
+                    <div style="margin-bottom: 15px;">
+                        <button class="select-btn" onclick="selectAllSeries()">Tutte</button>
+                        <button class="select-btn" onclick="deselectAllSeries()">Nessuna</button>
+                        <button class="select-btn" onclick="selectOnlyPET()">Solo PET</button>
+                    </div>
+                    <div id="series-list">
+                        <!-- Serie vengono aggiunte dinamicamente da app.js -->
+                    </div>
+                </div>
+                
                 <button class="secondary" onclick="runAnalysis()">
                     ▶️ Avvia Analisi
                 </button>
@@ -573,6 +602,32 @@
                 <div id="analysis-status" class="status"></div>
                 
                 <div id="analysis-report" style="margin-top: 20px;"></div>
+            </div>
+        </div>
+        
+        <div id="tab-history" class="tab-content">
+            <div class="sidebar" style="max-width: 1200px; margin: 0 auto;">
+                <div class="section-title">📊 Storico Quality Control</div>
+                <p style="color: #999; margin-bottom: 20px;">
+                    Visualizza lo storico QC e confronta sessioni multiple per analisi trend.
+                </p>
+                
+                <div style="margin-bottom: 20px;">
+                    <button onclick="loadQCHistory()" style="margin-right: 10px;">
+                        🔄 Ricarica Storico
+                    </button>
+                    <button onclick="compareSelected()">
+                        📊 Confronta Selezionate
+                    </button>
+                </div>
+                
+                <div id="history-table" style="margin-top: 20px;">
+                    <!-- Tabella popolata dinamicamente -->
+                </div>
+                
+                <div id="comparison-results" style="margin-top: 30px;">
+                    <!-- Risultati comparazione -->
+                </div>
             </div>
         </div>
     </div>

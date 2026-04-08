@@ -14,10 +14,10 @@ import os
 from collections import defaultdict
 
 
-def load_series(folder_path, series_uid):
+def load_series(folder_path, series_uid, lut_name='Rainbow2'):
     """Carica serie DICOM e converti in base64"""
     try:
-        print(f"[DEBUG] Starting load_series for {series_uid}", flush=True)
+        print(f"[DEBUG] Starting load_series for {series_uid} with LUT={lut_name}", flush=True)
         
         # Trova tutti i file DICOM
         dicom_files = []
@@ -33,7 +33,9 @@ def load_series(folder_path, series_uid):
         for filepath in dicom_files:
             try:
                 ds = pydicom.dcmread(filepath, stop_before_pixels=True)
-                if hasattr(ds, 'SeriesInstanceUID') and ds.SeriesInstanceUID == series_uid:
+                # FIX: strip whitespace da UID per match corretto
+                file_uid = str(ds.SeriesInstanceUID).strip() if hasattr(ds, 'SeriesInstanceUID') else None
+                if file_uid and file_uid == series_uid.strip():
                     instance_number = int(ds.InstanceNumber) if hasattr(ds, 'InstanceNumber') else 0
                     series_files.append({
                         'filepath': filepath,
@@ -82,16 +84,50 @@ def load_series(folder_path, series_uid):
                 if img.dtype != np.uint8:
                     img = cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
                 
-                # Converti a RGB
-                if len(img.shape) == 2:
-                    img_rgb = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+                # Applica LUT selezionata per PET
+                modality = ds.Modality if hasattr(ds, 'Modality') else 'UN'
+                
+                if modality == 'PT':
+                    # Carica LUT selezionata (path relativo)
+                    lut_path = os.path.join('luts', f'{lut_name}.cm')
+                    
+                    if os.path.exists(lut_path):
+                        try:
+                            with open(lut_path, 'r') as f:
+                                lut_colors = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+                            
+                            # Crea lookup table 256 RGB
+                            lut_table = np.zeros((256, 3), dtype=np.uint8)
+                            for i in range(256):
+                                # Mappa valore pixel (0-255) a colore LUT
+                                idx = min(int(i * (len(lut_colors) - 1) / 255.0), len(lut_colors) - 1)
+                                hex_color = lut_colors[idx].lstrip('#')
+                                lut_table[i, 0] = int(hex_color[0:2], 16)  # R
+                                lut_table[i, 1] = int(hex_color[2:4], 16)  # G
+                                lut_table[i, 2] = int(hex_color[4:6], 16)  # B
+                            
+                            # Applica LUT usando indexing NumPy
+                            img_rgb = lut_table[img]
+                        except Exception as e:
+                            print(f"  LUT error: {e}, using JET fallback", flush=True)
+                            img_rgb = cv2.applyColorMap(img, cv2.COLORMAP_JET)
+                    else:
+                        # Fallback: COLORMAP_JET
+                        print(f"  LUT {lut_name} not found, using JET", flush=True)
+                        img_rgb = cv2.applyColorMap(img, cv2.COLORMAP_JET)
                 else:
-                    img_rgb = img
+                    # CT: converti a grayscale RGB
+                    if len(img.shape) == 2:
+                        img_rgb = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+                    else:
+                        img_rgb = img
                 
                 # Encode JPEG
                 _, buffer = cv2.imencode('.jpg', img_rgb, [cv2.IMWRITE_JPEG_QUALITY, 90])
                 img_b64 = base64.b64encode(buffer).decode('utf-8')
                 data_url = f"data:image/jpeg;base64,{img_b64}"
+                
+                # Ritorna solo immagine (backward compatible)
                 images_b64.append(data_url)
                 print(f"  OK", flush=True)
                     
@@ -117,10 +153,11 @@ def load_series(folder_path, series_uid):
 
 if __name__ == '__main__':
     if len(sys.argv) < 3:
-        print(json.dumps({'error': 'Missing arguments: folder_path series_uid'}))
+        print(json.dumps({'error': 'Missing arguments: folder_path series_uid [lut_name]'}))
         sys.exit(1)
     
     folder_path = sys.argv[1]
     series_uid = sys.argv[2]
+    lut_name = sys.argv[3] if len(sys.argv) > 3 else 'Rainbow2'
     
-    load_series(folder_path, series_uid)
+    load_series(folder_path, series_uid, lut_name)
