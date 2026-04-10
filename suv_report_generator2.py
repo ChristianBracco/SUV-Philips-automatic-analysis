@@ -666,7 +666,7 @@ class HTMLReportGenerator:
         /* Print styles */
         @page {
             size: A4 portrait;
-            margin: 8mm 8mm;
+            margin: 10mm 8mm;
         }
         
         @media print {
@@ -681,105 +681,122 @@ class HTMLReportGenerator:
                 margin: 0 !important;
                 padding: 0 !important;
                 font-size: 8pt !important;
-                line-height: 1.25 !important;
+                line-height: 1.2 !important;
+                color: #000 !important;
             }
 
-            .toolbar { display: none !important; }
+            .toolbar {
+                display: none !important;
+            }
 
             .container {
                 max-width: 100% !important;
                 margin: 0 !important;
                 padding: 0 !important;
+                background: white !important;
                 box-shadow: none !important;
                 border-radius: 0 !important;
             }
 
-            /* ── HEADER: mantieni gradiente, riduci padding ── */
+            /* HEADER - compatto */
             .header {
-                page-break-inside: avoid !important;
-                padding: 5mm 6mm !important;
-                margin-bottom: 0 !important;
-                animation: none !important;
+                page-break-inside: avoid;
+                background: #2c3e50 !important;
+                color: white !important;
+                padding: 4mm 6mm !important;
+                margin-bottom: 2mm !important;
             }
-            .header::before { display: none !important; }
-            .header h1 { font-size: 14pt !important; margin-bottom: 1mm !important; }
-            .header .subtitle { font-size: 9pt !important; margin-bottom: 2mm !important; }
-            .header .institution { padding: 2mm 3mm !important; margin-top: 2mm !important; font-size: 8pt !important; }
-            .metadata-separator { margin-top: 2mm !important; padding-top: 2mm !important; }
-            .metadata-grid {
-                display: grid !important;
-                grid-template-columns: 1fr 1fr !important;
-                gap: 0.5mm 4mm !important;
+            .header h1 {
+                font-size: 13pt !important;
+                margin-bottom: 1mm !important;
+            }
+            .header .subtitle {
+                font-size: 9pt !important;
+                margin-bottom: 2mm !important;
+            }
+            .header .institution {
                 font-size: 8pt !important;
-                line-height: 1.5 !important;
+                padding: 2mm !important;
             }
-            .report-timestamp { margin-top: 2mm !important; font-size: 7pt !important; }
+            .metadata-separator {
+                margin-top: 2mm !important;
+                padding-top: 2mm !important;
+            }
+            .metadata-grid {
+                grid-template-columns: 1fr 1fr !important;
+                gap: 1mm !important;
+                font-size: 8pt !important;
+                line-height: 1.4 !important;
+            }
+            .report-timestamp {
+                margin-top: 2mm !important;
+                font-size: 7pt !important;
+            }
 
-            /* ── SUMMARY: 5 card in riga, mantieni border-left colorato ── */
+            /* SUMMARY - 5 cards in riga unica */
             .summary {
+                page-break-inside: avoid;
                 display: grid !important;
                 grid-template-columns: repeat(5, 1fr) !important;
                 gap: 2mm !important;
-                padding: 2mm 2mm !important;
-                margin-bottom: 0 !important;
-                background: #ecf0f1 !important;
-                page-break-inside: avoid !important;
+                padding: 2mm !important;
+                margin-bottom: 2mm !important;
+                background: #f8f9fa !important;
             }
             .summary-card {
-                padding: 2mm 2.5mm !important;
-                border-radius: 4px !important;
+                padding: 2mm !important;
+                border: 0.5pt solid #ccc !important;
+                background: white !important;
                 box-shadow: none !important;
-                transform: none !important;
-                transition: none !important;
+                border-left-width: 3px !important;
             }
             .summary-card .label {
-                font-size: 5.5pt !important;
-                margin-bottom: 0.5mm !important;
-                letter-spacing: 0 !important;
+                font-size: 6pt !important;
+                margin-bottom: 1mm !important;
             }
-            .summary-card .value { font-size: 10pt !important; }
-            .summary-card .unit { font-size: 7pt !important; }
+            .summary-card .value {
+                font-size: 11pt !important;
+            }
 
-            /* ── SEZIONI ── */
+            /* SEZIONI */
             .section {
                 padding: 3mm 4mm !important;
-                margin-bottom: 0 !important;
-                border-bottom: 0.5pt solid #e0e0e0 !important;
+                margin-bottom: 2mm !important;
+                border-bottom: 1pt solid #e0e0e0 !important;
+                page-break-inside: avoid;
             }
             .section-title {
                 font-size: 10pt !important;
                 margin-bottom: 2mm !important;
-                padding-bottom: 1mm !important;
-                border-bottom-width: 2px !important;
+                padding-bottom: 1.5mm !important;
             }
             .section-title .icon {
                 width: 22px !important;
                 height: 22px !important;
-                font-size: 14px !important;
-                border-radius: 6px !important;
+                font-size: 0.9em !important;
             }
 
-            /* sub-summary dentro sezioni (3 cards statistiche) */
-            .section > div[style*="padding: 0"] {
-                margin-bottom: 2mm !important;
-            }
+            /* SUB-SUMMARY dentro sezioni (3 cards) */
             .section .summary {
                 grid-template-columns: repeat(3, 1fr) !important;
-                background: transparent !important;
+                margin-bottom: 2mm !important;
                 padding: 0 !important;
-                gap: 1.5mm !important;
             }
 
-            /* ── GRAFICI ── */
+            /* GRAFICI */
             .chart-container {
-                page-break-inside: avoid !important;
-                margin-bottom: 1.5mm !important;
-                padding: 1.5mm 2mm !important;
+                page-break-inside: avoid;
+                margin-bottom: 2mm !important;
+                padding: 2mm !important;
                 border: 0.5pt solid #e0e0e0 !important;
                 box-shadow: none !important;
                 border-radius: 4px !important;
             }
-            .chart-title { font-size: 8pt !important; margin-bottom: 1mm !important; }
+            .chart-title {
+                font-size: 8pt !important;
+                margin-bottom: 1mm !important;
+                font-weight: bold !important;
+            }
             .chart-container svg,
             .chart-container img {
                 max-width: 100% !important;
@@ -787,99 +804,116 @@ class HTMLReportGenerator:
                 height: auto !important;
                 width: 100% !important;
             }
-            .chart-container > div[style*="0.85em"] {
+            .chart-container div[style*="font-size: 0.85em"] {
                 font-size: 6.5pt !important;
                 margin-top: 0.5mm !important;
             }
 
-            /* grafici verticali in stampa */
+            /* GRIGLIA grafici - verticale anche in stampa */
             .charts-grid {
-                display: grid !important;
                 grid-template-columns: 1fr !important;
-                gap: 1.5mm !important;
-                margin-bottom: 1.5mm !important;
+                gap: 2mm !important;
+                margin-bottom: 2mm !important;
             }
             .charts-grid .chart-container {
                 margin-bottom: 0 !important;
             }
-            .charts-grid .chart-container svg {
-                max-height: 48mm !important;
+            .charts-grid .chart-container svg,
+            .charts-grid .chart-container img {
+                max-height: 45mm !important;
             }
 
-            /* grafico NEMA doppio (img base64) */
-            .chart-container > img {
-                max-height: 60mm !important;
-            }
-
-            /* ── TABELLE ── */
+            /* TABELLE - niente page-break automatici, compatte */
             .data-table {
-                font-size: 5.5pt !important;
+                font-size: 6pt !important;
                 width: 100% !important;
                 border-collapse: collapse !important;
-                margin-bottom: 1.5mm !important;
-                border-radius: 0 !important;
-                overflow: visible !important;
+                margin-bottom: 2mm !important;
             }
-            .data-table thead {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
+            .data-table th {
+                padding: 1mm 1.5mm !important;
+                font-size: 6pt !important;
             }
-            .data-table th { padding: 1mm 1mm !important; font-size: 5.5pt !important; letter-spacing: 0 !important; }
-            .data-table td { padding: 0.6mm 1mm !important; }
-            .data-table tbody tr:hover { background: none !important; }
-
-            /* header tabella "Dati Dettagliati" */
-            h3 { font-size: 8pt !important; margin: 1.5mm 0 1mm !important; }
-
-            /* criteri NEMA box */
-            div[style*="border-left: 5px solid"] {
-                padding: 1.5mm 2mm !important;
-                margin-top: 1.5mm !important;
+            .data-table td {
+                padding: 0.8mm 1.5mm !important;
             }
-            div[style*="border-left: 5px solid"] h4 { font-size: 7pt !important; margin-bottom: 0.5mm !important; }
-            div[style*="border-left: 5px solid"] li { font-size: 6.5pt !important; }
+            h3[style*="color: var(--primary)"] {
+                font-size: 8pt !important;
+                margin: 2mm 0 1mm 0 !important;
+            }
 
-            /* ── DICOM ROI: 2 affiancate ── */
-            .dicom-section { page-break-before: avoid !important; }
+            /* CRITERI NEMA box */
+            div[style*="background: #f8f9fa"][style*="border-left"] {
+                padding: 2mm !important;
+                margin-top: 2mm !important;
+                font-size: 7pt !important;
+            }
+            div[style*="background: #f8f9fa"] h4 {
+                font-size: 7.5pt !important;
+                margin-bottom: 1mm !important;
+            }
+
+            /* SEZIONE DICOM ROI - compatta, 2 immagini affiancate */
+            .dicom-section {
+                page-break-before: avoid !important;
+            }
             .dicom-roi-gallery {
                 display: grid !important;
                 grid-template-columns: repeat(2, 1fr) !important;
-                gap: 2mm !important;
-                margin-top: 1.5mm !important;
+                gap: 3mm !important;
+                margin-top: 2mm !important;
             }
             .dicom-roi-container {
-                page-break-inside: avoid !important;
-                padding: 1.5mm !important;
-                box-shadow: none !important;
+                page-break-inside: avoid;
+                padding: 2mm !important;
                 border: 0.5pt solid #ccc !important;
+                box-shadow: none !important;
             }
-            .dicom-roi-header { margin-bottom: 1mm !important; }
-            .dicom-roi-header h3 { font-size: 8pt !important; margin: 0 !important; }
-            .modality-badge { font-size: 6pt !important; padding: 0.5mm 1.5mm !important; }
+            .dicom-roi-header {
+                margin-bottom: 1.5mm !important;
+            }
+            .dicom-roi-header h3 {
+                font-size: 9pt !important;
+                margin: 0 !important;
+            }
+            .modality-badge {
+                font-size: 6.5pt !important;
+                padding: 0.5mm 2mm !important;
+            }
             .dicom-roi-image {
-                max-height: 65mm !important;
+                max-width: 100% !important;
+                max-height: 70mm !important;
+                height: auto !important;
                 width: 100% !important;
                 object-fit: contain !important;
+                margin: 0 auto !important;
                 display: block !important;
             }
-            .dicom-roi-caption { font-size: 6.5pt !important; padding: 1mm !important; margin-top: 1mm !important; }
-
-            /* ── CONCLUSIONI ── */
-            .section > .card { padding: 2mm !important; }
-            input[type="checkbox"] { width: 10px !important; height: 10px !important; }
-
-            /* ── FOOTER: mantieni bg scuro ── */
-            .footer {
-                padding: 3mm !important;
-                margin-top: 0 !important;
-                font-size: 6.5pt !important;
+            .dicom-roi-caption {
+                font-size: 7pt !important;
+                margin-top: 1mm !important;
+                padding: 1mm !important;
             }
-            .footer .timestamp { margin-top: 1mm !important; font-size: 6pt !important; }
 
-            p, li { font-size: 7pt !important; }
-            h2 { font-size: 10pt !important; margin: 1.5mm 0 !important; }
-            img { page-break-inside: avoid !important; }
-            .badge { padding: 2px 6px !important; font-size: 6pt !important; }
+            /* CONCLUSIONI */
+            .section div[style*="page-break-inside:avoid"] {
+                padding: 2mm !important;
+            }
+
+            /* FOOTER */
+            .footer {
+                margin-top: 3mm !important;
+                padding: 3mm !important;
+                font-size: 7pt !important;
+            }
+            .footer .timestamp {
+                margin-top: 1mm !important;
+            }
+
+            p, li { font-size: 7.5pt !important; }
+            h2 { font-size: 11pt !important; margin: 2mm 0 !important; }
+            h3 { font-size: 9pt !important; }
+            img { page-break-inside: avoid; }
         }
         
         /* Responsive */

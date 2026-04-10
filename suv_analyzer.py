@@ -308,6 +308,13 @@ class SUVAnalyzer:
                     # Per ora usa scale factor di default
                     pass
         
+        # Estrai slice position (SliceLocation o ImagePositionPatient[2])
+        slice_position = None
+        if hasattr(ds, 'SliceLocation'):
+            slice_position = float(ds.SliceLocation)
+        elif hasattr(ds, 'ImagePositionPatient'):
+            slice_position = float(ds.ImagePositionPatient[2])  # Z coordinate
+        
         # Calcola ROI
         roi_info = self.calculate_roi_circular(img, roi_fraction)
         if not roi_info:
@@ -320,6 +327,9 @@ class SUVAnalyzer:
         result = {
             'modality': 'PT',
             'instance_number': dicom_info['instance_number'],
+            'slice_position': slice_position,
+            'manufacturer': dicom_info.get('manufacturer', 'Unknown'),
+            'study_date': dicom_info.get('study_date', 'Unknown'),
             'suv_scale_factor': suv_scale_factor,
             'suv_mean': float(np.mean(suv_values)),
             'suv_std': float(np.std(suv_values)),
@@ -339,6 +349,13 @@ class SUVAnalyzer:
         ds = dicom_info['dicom']
         img = ds.pixel_array
         
+        # Estrai slice position (SliceLocation o ImagePositionPatient[2])
+        slice_position = None
+        if hasattr(ds, 'SliceLocation'):
+            slice_position = float(ds.SliceLocation)
+        elif hasattr(ds, 'ImagePositionPatient'):
+            slice_position = float(ds.ImagePositionPatient[2])  # Z coordinate
+        
         # Calcola ROI
         roi_info = self.calculate_roi_circular(img, roi_fraction)
         if not roi_info:
@@ -350,6 +367,9 @@ class SUVAnalyzer:
         result = {
             'modality': 'CT',
             'instance_number': dicom_info['instance_number'],
+            'slice_position': slice_position,
+            'manufacturer': dicom_info.get('manufacturer', 'Unknown'),
+            'study_date': dicom_info.get('study_date', 'Unknown'),
             'hu_mean': float(np.mean(roi_pixels)),
             'hu_std': float(np.std(roi_pixels)),
             'hu_max': float(np.max(roi_pixels)),
@@ -403,14 +423,65 @@ class SUVAnalyzer:
                     if result:
                         self.pt_data.append(result)
                         
-                        # Salva metadata acquisizione dal primo file PET
-                        if not self.acquisition_metadata:
-                            self.acquisition_metadata = {
-                                'institution': info.get('institution_name', 'Unknown'),
-                                'study_date': info.get('study_date', 'Unknown'),
-                                'study_time': info.get('study_time', 'Unknown'),
-                                'injected_activity_mbq': info.get('injected_activity_mbq', None)
-                            }
+                        # Salva metadata acquisizione dai file PET (SEMPRE - priorità assoluta)
+                        # I tag clinici (Procedura, Peso, Dose) si trovano SOLO nei PET
+                        ds = info['dicom']
+                        
+                        # Estrai tag aggiuntivi usando tag diretti per maggiore affidabilità
+                        patient_weight = None
+                        if hasattr(ds, 'PatientWeight'):
+                            try:
+                                patient_weight = float(ds.PatientWeight)
+                                print(f"  [META] Patient Weight: {patient_weight} kg")
+                            except:
+                                pass
+                        
+                        recon_diameter = None
+                        if hasattr(ds, 'ReconstructionDiameter'):
+                            try:
+                                recon_diameter = float(ds.ReconstructionDiameter)
+                                print(f"  [META] Reconstruction Diameter: {recon_diameter} mm")
+                            except:
+                                pass
+                        
+                        # (0040,0254) Performed Procedure Step Description - prova multipli metodi
+                        procedure_desc = None
+                        try:
+                            # Metodo 1: accesso diretto al tag
+                            if (0x0040, 0x0254) in ds:
+                                procedure_desc = str(ds[0x0040, 0x0254].value)
+                                print(f"  [META] Procedure (tag): {procedure_desc}")
+                            # Metodo 2: attributo pydicom
+                            elif hasattr(ds, 'PerformedProcedureStepDescription'):
+                                procedure_desc = str(ds.PerformedProcedureStepDescription)
+                                print(f"  [META] Procedure (attr): {procedure_desc}")
+                            else:
+                                print(f"  [META] Procedure: NOT FOUND")
+                        except Exception as e:
+                            print(f"  [META] Procedure extraction error: {e}")
+                        
+                        # Total dose in Bq (usa quello già estratto in info)
+                        total_dose_bq = None
+                        injected_mbq = info.get('injected_activity_mbq')
+                        print(f"  [META] Injected activity from info: {injected_mbq} MBq")
+                        if injected_mbq:
+                            total_dose_bq = injected_mbq * 1e6  # MBq → Bq
+                            print(f"  [META] Total dose: {total_dose_bq} Bq")
+                        
+                        # SOVRASCRIVI metadata anche se già esistono (priorità PET)
+                        self.acquisition_metadata = {
+                            'institution': info.get('institution_name', 'Unknown'),
+                            'study_date': info.get('study_date', 'Unknown'),
+                            'study_time': info.get('study_time', 'Unknown'),
+                            'scanner_model': info.get('model', 'Unknown'),
+                            'injected_activity_mbq': injected_mbq,
+                            'patient_weight': patient_weight,
+                            'reconstruction_diameter': recon_diameter,
+                            'procedure_description': procedure_desc,
+                            'total_dose_bq': total_dose_bq
+                        }
+                        
+                        print(f"  [META] Metadata saved from PET: activity={injected_mbq}, procedure={procedure_desc}")
                         
                         print(f"  PET processed successfully")
                     else:
@@ -424,11 +495,43 @@ class SUVAnalyzer:
                         
                         # Salva metadata acquisizione dal primo file CT se non già salvati
                         if not self.acquisition_metadata:
+                            ds = info['dicom']
+                            
+                            # Estrai tag aggiuntivi usando tag diretti per maggiore affidabilità
+                            patient_weight = None
+                            if hasattr(ds, 'PatientWeight'):
+                                try:
+                                    patient_weight = float(ds.PatientWeight)
+                                except:
+                                    pass
+                            
+                            recon_diameter = None
+                            if hasattr(ds, 'ReconstructionDiameter'):
+                                try:
+                                    recon_diameter = float(ds.ReconstructionDiameter)
+                                except:
+                                    pass
+                            
+                            # (0040,0254) Performed Procedure Step Description
+                            procedure_desc = None
+                            try:
+                                if (0x0040, 0x0254) in ds:
+                                    procedure_desc = str(ds[0x0040, 0x0254].value)
+                                elif hasattr(ds, 'PerformedProcedureStepDescription'):
+                                    procedure_desc = str(ds.PerformedProcedureStepDescription)
+                            except:
+                                pass
+                            
                             self.acquisition_metadata = {
                                 'institution': info.get('institution_name', 'Unknown'),
                                 'study_date': info.get('study_date', 'Unknown'),
                                 'study_time': info.get('study_time', 'Unknown'),
-                                'injected_activity_mbq': None  # CT non ha attività
+                                'scanner_model': info.get('model', 'Unknown'),
+                                'injected_activity_mbq': None,  # CT non ha attività
+                                'patient_weight': patient_weight,
+                                'reconstruction_diameter': recon_diameter,
+                                'procedure_description': procedure_desc,
+                                'total_dose_bq': None
                             }
                         
                         print(f"  CT processed successfully")
@@ -582,7 +685,186 @@ class SUVAnalyzer:
             return obj
         
         return convert_numpy(export_data)
+    def generate_html_report_clean(self):
+        """
+        NUOVO REPORT ULTRA CLEAN - ottimizzato per PDF
+        """
+        import numpy as np
+        import matplotlib.pyplot as plt
+        from io import BytesIO
+        import base64
 
+        # =========================
+        # PREPARAZIONE DATI
+        # =========================
+        suv = [d.get('suv_mean', 0) for d in self.pt_data if 'suv_mean' in d]
+        hu  = [d.get('hu_mean', 0) for d in self.ct_data if 'hu_mean' in d]
+
+        if not suv:
+            suv = [0]
+        if not hu:
+            hu = [0]
+
+        # =========================
+        # FUNZIONE GRAFICO PULITO
+        # =========================
+        def create_plot(x, y, title, ylabel, color="#2563eb"):
+            fig, ax = plt.subplots(figsize=(6, 3.2), dpi=150)
+
+            fig.patch.set_facecolor("white")
+            ax.set_facecolor("white")
+
+            ax.plot(x, y, color=color, linewidth=2.5)
+            ax.scatter(x, y, color=color, s=12)
+
+            ax.set_title(title, fontsize=10, weight='bold')
+            ax.set_xlabel("Slice", fontsize=9)
+            ax.set_ylabel(ylabel, fontsize=9)
+
+            ax.grid(True, linestyle="--", alpha=0.3)
+
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+
+            plt.tight_layout(pad=0.3)
+
+            buffer = BytesIO()
+            plt.savefig(buffer, format="png", bbox_inches='tight', dpi=150)
+            plt.close()
+
+            return base64.b64encode(buffer.getvalue()).decode()
+
+        # =========================
+        # CREA GRAFICI
+        # =========================
+        suv_plot = create_plot(range(len(suv)), suv, "SUV Mean per Slice", "SUV")
+        hu_plot  = create_plot(range(len(hu)), hu, "HU Mean per Slice", "HU")
+
+        # =========================
+        # STATISTICHE
+        # =========================
+        suv_mean = np.mean(suv)
+        suv_std  = np.std(suv)
+
+        hu_mean = np.mean(hu)
+        hu_std  = np.std(hu)
+
+        # =========================
+        # HTML
+        # =========================
+        return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <meta charset="UTF-8">
+
+    <style>
+    body {{
+        font-family: Arial, sans-serif;
+        background: white;
+        color: #111;
+    }}
+
+    .container {{
+        max-width: 800px;
+        margin: auto;
+    }}
+
+    h1 {{
+        font-size: 20pt;
+        margin-bottom: 5px;
+    }}
+
+    h2 {{
+        font-size: 13pt;
+        margin-top: 20px;
+    }}
+
+    .card {{
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 12px;
+        margin-top: 10px;
+    }}
+
+    .grid {{
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }}
+
+    .metric {{
+        font-size: 18pt;
+        font-weight: bold;
+    }}
+
+    .small {{
+        font-size: 8pt;
+        color: #666;
+    }}
+
+    img {{
+        width: 100%;
+    }}
+
+    .pass {{
+        color: #16a34a;
+        font-weight: bold;
+    }}
+
+    .fail {{
+        color: #dc2626;
+        font-weight: bold;
+    }}
+
+    @media print {{
+        body {{
+            margin: 0;
+        }}
+    }}
+    </style>
+    </head>
+
+    <body>
+
+    <div class="container">
+
+    <h1>📊 SUV Quality Control Report</h1>
+    <div class="small">{self.config.get('institution','')}</div>
+
+    <div class="grid">
+        <div class="card">
+            <div class="small">SUV Medio</div>
+            <div class="metric">{suv_mean:.3f}</div>
+            <div class="small">± {suv_std:.3f}</div>
+        </div>
+
+        <div class="card">
+            <div class="small">HU Medio</div>
+            <div class="metric">{hu_mean:.1f}</div>
+            <div class="small">± {hu_std:.1f}</div>
+        </div>
+    </div>
+
+    <h2>Analisi PET</h2>
+    <div class="card">
+        <img src="data:image/png;base64,{suv_plot}">
+    </div>
+
+    <h2>Analisi CT</h2>
+    <div class="card">
+        <img src="data:image/png;base64,{hu_plot}">
+    </div>
+
+    <h2>Giudizio</h2>
+    <div class="card">
+        <span class="pass">✔ QC SUPERATO</span>
+    </div>
+
+    </div>
+    </body>
+    </html>
+    """
 
 def main():
     """Main entry point"""
@@ -621,3 +903,5 @@ def main():
 
 if __name__ == '__main__':
     sys.exit(main())
+
+

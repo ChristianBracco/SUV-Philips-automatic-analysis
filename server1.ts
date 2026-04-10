@@ -304,30 +304,20 @@ serve({
         
         const page = await browser.newPage();
         
-        // Viewport A4 a 96dpi
-        await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 2 });
-        
-        // ⚡ CRITICO: attiva @media print CSS (stesso engine del browser)
-        await page.emulateMediaType('print');
-        
         // Carica HTML
         await page.setContent(html, {
           waitUntil: 'networkidle0'
         });
         
-        // Attendi rendering SVG/immagini
-        await page.evaluateHandle('document.fonts.ready');
-        
         // Genera PDF con impostazioni A4
         const pdfBuffer = await page.pdf({
           format: 'A4',
           printBackground: true,
-          preferCSSPageSize: true,
           margin: {
             top: '10mm',
-            right: '8mm',
+            right: '10mm',
             bottom: '10mm',
-            left: '8mm'
+            left: '10mm'
           }
         });
         

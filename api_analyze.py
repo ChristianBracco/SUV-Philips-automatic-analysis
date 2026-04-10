@@ -64,7 +64,7 @@ def main():
         # Process folder
         analyzer.process_folder(folder_path)
         
-        # Generate report
+        # Generate report (FULL VERSION - NOT CLEAN!)
         report_html = analyzer.generate_html_report()
         
         # Esporta anche JSON
@@ -78,12 +78,42 @@ def main():
         reports_dir = os.path.join('public', 'reports')
         os.makedirs(reports_dir, exist_ok=True)
         
-        # Nome file con timestamp
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        report_filename = f"SUV_QC_Report_{timestamp}.html"
-        json_filename = f"SUV_QC_Report_{timestamp}.json"
+        # Costruisci nome file da Manufacturer DICOM + data acquisizione
+        # Estrai Manufacturer dal primo file DICOM processato
+        scanner_name = "Unknown"
+        study_date = "Unknown"
+        
+        # Prova a estrarre da pt_data o ct_data
+        if analyzer.pt_data:
+            scanner_name = analyzer.pt_data[0].get('manufacturer', 'Unknown')
+            study_date = analyzer.pt_data[0].get('study_date', 'Unknown')
+        elif analyzer.ct_data:
+            scanner_name = analyzer.ct_data[0].get('manufacturer', 'Unknown')
+            study_date = analyzer.ct_data[0].get('study_date', 'Unknown')
+        
+        # Fallback: prova acquisition_metadata
+        if scanner_name == "Unknown":
+            scanner_name = analyzer.acquisition_metadata.get('manufacturer', 'Unknown')
+        if study_date == "Unknown":
+            study_date = analyzer.acquisition_metadata.get('study_date', 'Unknown')
+        
+        # Sanitizza nome macchina (rimuovi caratteri non validi per filename)
+        scanner_name_clean = scanner_name.replace(' ', '_').replace('/', '-').replace('\\', '-')
+        
+        # Formatta data acquisizione (YYYYMMDD)
+        if study_date != 'Unknown' and len(study_date) >= 8:
+            date_formatted = f"{study_date[0:4]}-{study_date[4:6]}-{study_date[6:8]}"
+        else:
+            date_formatted = datetime.now().strftime("%Y-%m-%d")
+        
+        # Nome file: Macchina_DataAcquisizione
+        report_filename = f"{scanner_name_clean}_{date_formatted}_SUV_QC.html"
+        json_filename = f"{scanner_name_clean}_{date_formatted}_SUV_QC.json"
+        pdf_filename = f"{scanner_name_clean}_{date_formatted}_SUV_QC.pdf"
+        
         report_path = os.path.join(reports_dir, report_filename)
         json_path = os.path.join(reports_dir, json_filename)
+        pdf_path = os.path.join(reports_dir, pdf_filename)
         
         # Salva HTML su file
         with open(report_path, 'w', encoding='utf-8') as f:
@@ -109,8 +139,6 @@ def main():
             print(f"⚠️  Errore salvataggio database: {e}")
         
         # Genera anche PDF
-        pdf_filename = f"SUV_QC_Report_{timestamp}.pdf"
-        pdf_path = os.path.join(reports_dir, pdf_filename)
         pdf_url = f"reports/{pdf_filename}"
         
         try:
@@ -135,6 +163,7 @@ def main():
         # Path relativo per browser
         report_url = f"reports/{report_filename}"
         json_url = f"reports/{json_filename}"
+        pdf_url = f"reports/{pdf_filename}"
         
         # Return results
         result = {

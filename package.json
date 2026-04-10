@@ -17,7 +17,9 @@
   ],
   "author": "Dr. Christian Bracco",
   "license": "MIT",
-  "dependencies": {},
+  "dependencies": {
+    "puppeteer": "^24.40.0"
+  },
   "devDependencies": {
     "bun-types": "latest"
   }

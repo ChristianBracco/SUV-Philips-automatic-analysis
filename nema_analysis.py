@@ -25,28 +25,28 @@ warnings.filterwarnings('ignore', category=UserWarning, module='matplotlib')
 # ============================================================================
 
 def setup_modern_style():
-    """Imposta stile matplotlib moderno e professionale"""
-    plt.style.use('seaborn-v0_8-darkgrid')
+    """Imposta stile matplotlib moderno e professionale - sfondo bianco"""
+    plt.style.use('seaborn-v0_8-whitegrid')
     
-    # Parametri globali
+    # Parametri globali - tema chiaro professionale
     plt.rcParams.update({
-        'figure.facecolor': '#1a1a2e',
-        'axes.facecolor': '#16213e',
-        'axes.edgecolor': '#4FC3F7',
-        'axes.labelcolor': '#e0e0e0',
+        'figure.facecolor': 'white',
+        'axes.facecolor': 'white',
+        'axes.edgecolor': '#2c3e50',
+        'axes.labelcolor': '#2c3e50',
         'axes.grid': True,
-        'grid.color': '#2a2a4a',
-        'grid.alpha': 0.5,
+        'grid.color': '#cccccc',
+        'grid.alpha': 0.6,
         'grid.linestyle': '--',
         'grid.linewidth': 0.8,
-        'text.color': '#e0e0e0',
-        'xtick.color': '#b0b0b0',
-        'ytick.color': '#b0b0b0',
+        'text.color': '#2c3e50',
+        'xtick.color': '#2c3e50',
+        'ytick.color': '#2c3e50',
         'font.size': 11,
         'axes.titlesize': 13,
         'axes.labelsize': 11,
-        'legend.facecolor': '#1a1a2e',
-        'legend.edgecolor': '#4FC3F7',
+        'legend.facecolor': 'white',
+        'legend.edgecolor': '#bdc3c7',
         'legend.framealpha': 0.9
     })
 
@@ -159,6 +159,10 @@ class NEMAAnalysis:
         # Raccolta immagini per galleria
         gallery_images = []
         
+        # Variabile per salvare l'immagine rappresentativa (slice centrale)
+        representative_image = None
+        representative_slice_idx = len(self.results_data) // 2  # Slice centrale
+        
         for idx, result in enumerate(self.results_data):
             # Estrai dati
             radius = result['roi_radius']
@@ -248,8 +252,12 @@ class NEMAAnalysis:
                 NUmax.append(nu_max)
                 NUmin.append(nu_min)
                 
+                # Estrai slice_position dal result
+                slice_position = result.get('slice_position', instance_number)
+                
                 self.slice_data.append({
                     'instance_number': instance_number,
+                    'slice_position': slice_position,
                     'VMPmax': vmp_max,
                     'VMPmin': vmp_min,
                     'VMPmean': vmp_mean,
@@ -266,17 +274,25 @@ class NEMAAnalysis:
                     'instance': instance_number,
                     'cv': cv if temp_means else 0
                 })
+            
+            # Salva immagine rappresentativa (slice centrale o example_slice)
+            if idx == representative_slice_idx or idx == example_slice - 1:
+                representative_image = img_with_grid.copy()
         
-        # Grafici combinati
-        instance_numbers = [d['instance_number'] for d in self.slice_data]
+        # Grafici combinati - usa slice_positions se disponibili
+        slice_positions = [d.get('slice_position', d['instance_number']) for d in self.slice_data]
         plot_combined = self._create_combined_plot_modern(
-            instance_numbers, CV, NUmax, NUmin, 'PET'
+            slice_positions, CV, NUmax, NUmin, 'PET'
         )
         
         # Galleria immagini
         plot_gallery = self._create_image_gallery(gallery_images, 'PET')
         
-        return self.slice_data, plot_combined, plot_gallery
+        # Genera immagine singola rappresentativa
+        plot_single = self._create_single_image(representative_image, 'PET') if representative_image is not None else None
+        
+        # MODIFICA: ritorna anche plot_single invece di plot_gallery
+        return self.slice_data, plot_combined, plot_single
     
     def analyze_ct_circles(self, example_slice=15):
         """
@@ -285,7 +301,7 @@ class NEMAAnalysis:
         Returns:
             slice_data: Lista statistiche per slice
             plot_combined: Plot CV e NU moderni
-            plot_gallery: Galleria immagini con cerchi
+            plot_single: Immagine singola rappresentativa con ROI
         """
         VMPmax = []
         VMPmin = []
@@ -297,6 +313,10 @@ class NEMAAnalysis:
         
         # Raccolta immagini per galleria
         gallery_images = []
+        
+        # Variabile per salvare l'immagine rappresentativa (slice centrale)
+        representative_image = None
+        representative_slice_idx = len(self.results_data) // 2  # Slice centrale
         
         for idx, result in enumerate(self.results_data):
             # Estrai dati
@@ -373,8 +393,12 @@ class NEMAAnalysis:
                 NUmax.append(nu_max)
                 NUmin.append(nu_min)
                 
+                # Estrai slice_position dal result
+                slice_position = result.get('slice_position', instance_number)
+                
                 self.slice_data.append({
                     'instance_number': instance_number,
+                    'slice_position': slice_position,
                     'circle_means': circle_means_dict,
                     'VMPmax': vmp_max,
                     'VMPmin': vmp_min,
@@ -392,56 +416,68 @@ class NEMAAnalysis:
                     'instance': instance_number,
                     'cv': cv if temp_means else 0
                 })
+            
+            # Salva immagine rappresentativa (slice centrale o example_slice)
+            if idx == representative_slice_idx or idx == example_slice - 1:
+                representative_image = img_with_circles.copy()
         
-        # Grafici
-        instance_numbers = [d['instance_number'] for d in self.slice_data]
+        # Grafici - usa slice_positions se disponibili
+        slice_positions = [d.get('slice_position', d['instance_number']) for d in self.slice_data]
         plot_combined = self._create_combined_plot_modern(
-            instance_numbers, CV, NUmax, NUmin, 'CT'
+            slice_positions, CV, NUmax, NUmin, 'CT'
         )
         
         # Galleria immagini
         plot_gallery = self._create_image_gallery(gallery_images, 'CT')
         
-        return self.slice_data, plot_combined, plot_gallery
+        # Genera immagine singola rappresentativa
+        plot_single = self._create_single_image(representative_image, 'CT') if representative_image is not None else None
+        
+        # MODIFICA: ritorna plot_single invece di plot_gallery
+        return self.slice_data, plot_combined, plot_single
     
-    def _create_combined_plot_modern(self, instance_numbers, CV, NUmax, NUmin, modality):
+    def _create_combined_plot_modern(self, slice_positions, CV, NUmax, NUmin, modality):
         """
         Crea plot combinato CV e NU con stile moderno
         Layout: 2 subplot affiancati con stile dark/neon
         """
         fig = plt.figure(figsize=(12, 5), dpi=120)  # Dimensioni normali per HTML
+        fig.patch.set_facecolor('white')
         gs = GridSpec(1, 2, figure=fig, wspace=0.3)
         
-        # Colori moderni
-        color_cv = '#00F2FE'  # Ciano neon
-        color_nu_max = '#F093FB'  # Rosa neon
-        color_nu_min = '#F5576C'  # Rosso neon
+        # Colori professionali su sfondo bianco
+        color_cv = '#1565C0'      # Blu scuro
+        color_nu_max = '#7B1FA2'  # Viola
+        color_nu_min = '#C62828'  # Rosso scuro
         
         # ===== SUBPLOT 1: COEFFICIENT OF VARIATION =====
         ax1 = fig.add_subplot(gs[0])
         
         # Plot scatter + linea connettrice
-        ax1.plot(instance_numbers, CV, marker='o', markersize=8, 
+        ax1.plot(slice_positions, CV, marker='o', markersize=8, 
                 linestyle='-', linewidth=2, color=color_cv, 
                 label='CV (%)', alpha=0.8, markerfacecolor=color_cv, 
                 markeredgecolor='white', markeredgewidth=1.5)
         
         # Media line
         cv_mean = np.mean(CV)
+        cv_std = np.std(CV)
         ax1.axhline(cv_mean, color='#FFD700', linestyle='--', 
                    linewidth=2, alpha=0.7, label=f'CV medio = {cv_mean:.2f}%')
         
-        ax1.set_xlabel('Numero Fetta', fontsize=12, fontweight='bold')
+        ax1.set_xlabel('Slice Position (mm)', fontsize=12, fontweight='bold')
         ax1.set_ylabel('CV (%)', fontsize=12, fontweight='bold')
         ax1.set_title(f'Coefficient of Variation - {modality} Images', 
-                     fontsize=14, fontweight='bold', color='#4FC3F7', pad=15)
+                     fontsize=14, fontweight='bold', color='#2c3e50', pad=15)
         
-        # FIX: Limiti asse Y ragionevoli (0-10% per PET, 0-5% per CT)
-        cv_max = max(CV)
-        if modality == 'PT':
-            ax1.set_ylim(0, max(10, cv_max * 1.2))
-        else:  # CT
-            ax1.set_ylim(0, max(5, cv_max * 1.2))
+        # FIX: Zoom intorno al valore medio ± 2-3 deviazioni standard
+        y_min = max(0, cv_mean - 3 * cv_std)
+        y_max = cv_mean + 3 * cv_std
+        # Assicura almeno 1% di range per evitare plot troppo compressi
+        if y_max - y_min < 1.0:
+            y_max = cv_mean + 0.5
+            y_min = max(0, cv_mean - 0.5)
+        ax1.set_ylim(y_min, y_max)
         
         ax1.legend(loc='upper right', fontsize=10)
         ax1.grid(True, alpha=0.3)
@@ -450,30 +486,42 @@ class NEMAAnalysis:
         ax2 = fig.add_subplot(gs[1])
         
         # Plot NUmax e NUmin
-        ax2.plot(instance_numbers, NUmax, marker='s', markersize=7, 
+        ax2.plot(slice_positions, NUmax, marker='s', markersize=7, 
                 linestyle='-', linewidth=2, color=color_nu_max, 
                 label='NU max (%)', alpha=0.8, markerfacecolor=color_nu_max,
                 markeredgecolor='white', markeredgewidth=1.5)
         
-        ax2.plot(instance_numbers, NUmin, marker='D', markersize=7, 
+        ax2.plot(slice_positions, NUmin, marker='D', markersize=7, 
                 linestyle='-', linewidth=2, color=color_nu_min, 
                 label='NU min (%)', alpha=0.8, markerfacecolor=color_nu_min,
                 markeredgecolor='white', markeredgewidth=1.5)
         
         # Linea zero
-        ax2.axhline(0, color='white', linestyle=':', linewidth=1, alpha=0.5)
+        ax2.axhline(0, color='#7f8c8d', linestyle=':', linewidth=1, alpha=0.8)
         
         # Limiti tolleranza (±15%)
-        ax2.axhline(15, color='yellow', linestyle='--', linewidth=1.5, alpha=0.6)
-        ax2.axhline(-15, color='yellow', linestyle='--', linewidth=1.5, alpha=0.6)
+        ax2.axhline(15, color='#e67e22', linestyle='--', linewidth=1.5, alpha=0.8)
+        ax2.axhline(-15, color='#e67e22', linestyle='--', linewidth=1.5, alpha=0.8)
         
-        ax2.set_xlabel('Numero Fetta', fontsize=12, fontweight='bold')
+        ax2.set_xlabel('Slice Position (mm)', fontsize=12, fontweight='bold')
         ax2.set_ylabel('Non-Uniformity (%)', fontsize=12, fontweight='bold')
         ax2.set_title(f'Non-Uniformity (NUmax & NUmin) - {modality} Images', 
-                     fontsize=14, fontweight='bold', color='#4FC3F7', pad=15)
+                     fontsize=14, fontweight='bold', color='#2c3e50', pad=15)
         
-        # FIX: Limiti asse Y ragionevoli (±20% range fisso per leggibilità)
-        ax2.set_ylim(-20, 20)
+        # FIX: Zoom intorno al valore medio ± 5 deviazioni standard (aumentato da 3)
+        nu_all = NUmax + NUmin
+        nu_mean = np.mean(nu_all)
+        nu_std = np.std(nu_all)
+        y_min_nu = nu_mean - 5 * nu_std
+        y_max_nu = nu_mean + 5 * nu_std
+        # Clamp tra -20 e +20 per mantenere riferimento alle soglie ±15%
+        y_min_nu = max(-20, y_min_nu)
+        y_max_nu = min(20, y_max_nu)
+        # Assicura range minimo di 10%
+        if y_max_nu - y_min_nu < 10.0:
+            y_max_nu = nu_mean + 5
+            y_min_nu = nu_mean - 5
+        ax2.set_ylim(y_min_nu, y_max_nu)
         
         ax2.legend(loc='upper right', fontsize=10)
         ax2.grid(True, alpha=0.3)
@@ -483,7 +531,7 @@ class NEMAAnalysis:
         # Salva in buffer
         buf = BytesIO()
         plt.savefig(buf, format='png', bbox_inches='tight', dpi=150, 
-                   facecolor=fig.get_facecolor())
+                   facecolor='white')
         buf.seek(0)
         plt.close()
         
@@ -521,18 +569,60 @@ class NEMAAnalysis:
             # Titolo con info
             title = f"Slice {img_data['instance']} | CV = {img_data['cv']:.2f}%"
             ax.set_title(title, fontsize=12, fontweight='bold', 
-                        color='#4FC3F7', pad=10)
+                        color='#2c3e50', pad=10)
         
         # Titolo generale
         fig.suptitle(f'{modality} NEMA Analysis - ROI Gallery', 
-                    fontsize=16, fontweight='bold', color='#4FC3F7', y=0.98)
+                    fontsize=16, fontweight='bold', color='#2c3e50', y=0.98)
         
         # plt.tight_layout(rect=[0, 0, 1, 0.96])  # Commentato - causa warning
         
         # Salva in buffer
         buf = BytesIO()
         plt.savefig(buf, format='png', bbox_inches='tight', dpi=150,
-                   facecolor=fig.get_facecolor())
+                   facecolor='white')
+        buf.seek(0)
+        plt.close()
+        
+        # Converti in base64
+        img_b64 = base64.b64encode(buf.getvalue()).decode()
+        return img_b64
+    
+    def _create_single_image(self, img_with_roi, modality):
+        """
+        Crea immagine singola con ROI per visualizzazione nel report
+        
+        Args:
+            img_with_roi: Immagine BGR con ROI disegnate
+            modality: 'PT' o 'CT'
+            
+        Returns:
+            base64 encoded PNG
+        """
+        if img_with_roi is None:
+            return None
+        
+        # Converti BGR a RGB
+        img_rgb = cv2.cvtColor(img_with_roi, cv2.COLOR_BGR2RGB)
+        
+        # Crea figura con dimensioni appropriate
+        fig = plt.figure(figsize=(10, 10), dpi=150)
+        ax = fig.add_subplot(111)
+        
+        ax.imshow(img_rgb)
+        ax.axis('off')
+        
+        # Titolo informativo
+        title = f'{modality} Image with NEMA ROI Analysis'
+        ax.set_title(title, fontsize=14, fontweight='bold', 
+                    color='#2c3e50', pad=15)
+        
+        plt.tight_layout()
+        
+        # Salva in buffer
+        buf = BytesIO()
+        plt.savefig(buf, format='png', bbox_inches='tight', dpi=150,
+                   facecolor='white')
         buf.seek(0)
         plt.close()
         
