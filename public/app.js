@@ -13,6 +13,7 @@ const state = {
     currentSeriesForLUT: null,  // Serie corrente per reload con LUT
     images: [],
     uploadedFiles: [],
+    iqcheckData: null,  // Dati IQCheck processati (null = non caricato)
     viewer: {
         currentSlice: 0,
         windowCenter: 40,
@@ -780,6 +781,70 @@ function setupViewerEvents(canvas, ctx) {
 // ANALYSIS
 // ============================================================
 
+// ============================================================
+// IQCHECK IMPORT
+// ============================================================
+
+async function importIQCheck(file) {
+    if (!file) return;
+
+    showStatus('iqcheck-status', '⏳ Importazione in corso...', '');
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const response = await fetch('/api/import-iqcheck', {
+            method: 'POST',
+            body: formData
+        });
+
+        const resp = await response.json();
+
+        if (!resp.success) {
+            showStatus('iqcheck-status', `❌ Errore: ${resp.error || 'Import fallito'}`, 'error');
+            return;
+        }
+
+        // Unwrap: runPython torna {success, iqcheck: {...}}, vogliamo solo la parte interna
+        const data = resp.iqcheck;
+
+        // Salva i dati processati nello state
+        state.iqcheckData = data;
+
+        // Aggiorna UI: mostra riepilogo
+        const overallIcon = data.overall_pass ? '✅' : '❌';
+        const date = data.date || '—';
+        const headPass = data.evaluations?.head
+            ? Object.values(data.evaluations.head).every(v => v === 'pass') ? '✅' : '❌'
+            : '—';
+        const bodyPass = data.evaluations?.body
+            ? Object.values(data.evaluations.body).every(v => v === 'pass') ? '✅' : '❌'
+            : '—';
+
+        document.getElementById('iqcheck-summary').textContent =
+            `${date} · Head ${headPass} · Body ${bodyPass} · Esito: ${overallIcon}`;
+
+        document.getElementById('iqcheck-empty').style.display  = 'none';
+        document.getElementById('iqcheck-loaded').style.display = 'block';
+
+        showStatus('iqcheck-status', '✅ IQCheck importato correttamente', '');
+
+        // Reset dell'input per permettere di ricaricare lo stesso file
+        document.getElementById('iqcheck-input').value = '';
+
+    } catch (error) {
+        showStatus('iqcheck-status', `❌ Errore: ${error.message}`, 'error');
+    }
+}
+
+function removeIQCheck() {
+    state.iqcheckData = null;
+    document.getElementById('iqcheck-empty').style.display  = 'block';
+    document.getElementById('iqcheck-loaded').style.display = 'none';
+    document.getElementById('iqcheck-status').classList.remove('visible');
+}
+
 async function runAnalysis() {
     if (state.uploadedFolders.length === 0 && !state.currentFolder) {
         showStatus('analysis-status', '❌ Carica prima file DICOM o scansiona una cartella', 'error');
@@ -799,7 +864,8 @@ async function runAnalysis() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 folderPaths: foldersToAnalyze,
-                selectedSeries: getSelectedSeriesUIDs()
+                selectedSeries: getSelectedSeriesUIDs(),
+                iqcheckData: state.iqcheckData  // null se non caricato
             })
         });
         

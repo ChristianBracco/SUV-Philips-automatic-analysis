@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
 API: Analyze DICOM series
-Esegue analisi SUV solo sulle serie selezionate
+Esegue analisi SUV solo sulle serie selezionate.
+Supporta flag opzionale --iqcheck <path.json> per includere i dati IQCheck nel report.
 """
 
+import os
 import sys
 import json
 from pathlib import Path
@@ -13,23 +15,47 @@ import pydicom
 import io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
-# Import SUV analyzer
+# Import SUV analyzer e report generator
 from suv_analyzer import SUVAnalyzer
+from suv_report_generator import HTMLReportGenerator
+
+
+def _parse_args(argv):
+    """
+    Separa il flag --iqcheck <path> dagli altri argomenti posizionali.
+    Ritorna (positional_args, iqcheck_path_or_None).
+    """
+    positional = []
+    iqcheck_path = None
+    i = 0
+    while i < len(argv):
+        if argv[i] == '--iqcheck' and i + 1 < len(argv):
+            iqcheck_path = argv[i + 1]
+            i += 2
+        else:
+            positional.append(argv[i])
+            i += 1
+    return positional, iqcheck_path
+
 
 def main():
     """Main analysis function"""
     try:
-        # Parse arguments
-        if len(sys.argv) < 2:
+        # Parse arguments (esclude sys.argv[0] = nome script)
+        positional, iqcheck_path = _parse_args(sys.argv[1:])
+
+        if not positional:
             raise ValueError("Missing folder_path argument")
-        
-        folder_path = sys.argv[1]
-        
-        # Check for selected series UIDs (optional)
-        selected_series = []
-        if len(sys.argv) > 2:
-            # Additional args are selected series UIDs
-            selected_series = sys.argv[2:]
+
+        folder_path = positional[0]
+        selected_series = positional[1:]  # UIDs serie selezionate (opzionale)
+
+        # Carica dati IQCheck se presenti
+        iqcheck_data = None
+        if iqcheck_path:
+            with open(iqcheck_path, encoding='utf-8') as f:
+                iqcheck_data = json.load(f)
+            print(f"IQCheck caricato da: {iqcheck_path}", flush=True)
         
         print(f"Analyzing folder: {folder_path}", flush=True)
         if selected_series:
@@ -63,15 +89,26 @@ def main():
         
         # Process folder
         analyzer.process_folder(folder_path)
-        
-        # Generate report (FULL VERSION - NOT CLEAN!)
-        report_html = analyzer.generate_html_report()
+
+        # Analisi NEMA (necessaria per le sezioni uniformità del report)
+        print("\nEsecuzione analisi NEMA...", flush=True)
+        nema_results = analyzer.analyze_nema_uniformity(
+            example_slice_pt=analyzer.config.get('example_slice_pt', 15),
+            example_slice_ct=analyzer.config.get('example_slice_ct', 15)
+        )
+
+        # Genera report tramite HTMLReportGenerator (include sezione IQCheck se presente)
+        report_gen = HTMLReportGenerator(
+            analyzer,
+            nema_results=nema_results,
+            iqcheck_data=iqcheck_data
+        )
+        report_html = report_gen.generate()
         
         # Esporta anche JSON
         json_data = analyzer.export_json()
-        
+
         # Salva report su file
-        import os
         from datetime import datetime
         
         # Crea cartella reports se non esiste

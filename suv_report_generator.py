@@ -16,13 +16,14 @@ from io import BytesIO
 class HTMLReportGenerator:
     """Generatore report HTML per analisi SUV"""
     
-    def __init__(self, analyzer, nema_results=None):
+    def __init__(self, analyzer, nema_results=None, iqcheck_data=None):
         self.analyzer = analyzer
         self.pt_data = analyzer.pt_data
         self.ct_data = analyzer.ct_data
         self.secondary_captures = analyzer.secondary_captures
         self.config = analyzer.config
         self.nema_results = nema_results
+        self.iqcheck_data = iqcheck_data   # dict processato da api_iqcheck.py
         # Configurazione matplotlib per SVG
         plt.style.use('seaborn-v0_8-darkgrid')
     
@@ -200,6 +201,7 @@ class HTMLReportGenerator:
     {self._generate_nema_pet_section()}
     {self._generate_ct_section()}
     {self._generate_nema_ct_section()}
+    {self._generate_iqcheck_section()}
     {self._generate_dicom_section()}
     {self._generate_conclusions_section()}
     {self._generate_footer()}
@@ -591,6 +593,80 @@ class HTMLReportGenerator:
             border-radius: 8px;
         }
         
+        /* ── IQCheck CT ──────────────────────────────── */
+        .iqcheck-section {
+            background: #fafbfc;
+        }
+
+        .iqcheck-header-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 18px 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+
+        .iqcheck-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .iqcheck-grid { grid-template-columns: 1fr; }
+        }
+
+        .iqcheck-phantom-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+
+        .iqcheck-phantom-title {
+            font-size: 1.1em;
+            font-weight: 700;
+            padding: 14px 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid var(--border);
+            letter-spacing: 0.3px;
+        }
+
+        .iqcheck-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .iqcheck-table thead th {
+            padding: 9px 14px;
+            background: #f1f3f5;
+            font-size: 0.78em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #555;
+            font-weight: 600;
+        }
+
+        .iqcheck-table tbody td {
+            padding: 10px 14px;
+            border-bottom: 1px solid #f1f3f5;
+            font-size: 0.90em;
+        }
+
+        .iqcheck-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .iqcheck-table tbody tr:hover {
+            background: #f8f9fa;
+        }
+        /* ─────────────────────────────────────────────── */
+
         /* Footer */
         .footer {
             background: var(--primary);
@@ -1245,7 +1321,7 @@ class HTMLReportGenerator:
     
     def _generate_nema_pet_section(self):
         """Genera sezione analisi NEMA PET (griglia 25x25)"""
-        if 'pet' not in self.nema_results:
+        if not self.nema_results or 'pet' not in self.nema_results:
             return ""
         
         nema_pet = self.nema_results['pet']
@@ -1354,7 +1430,7 @@ class HTMLReportGenerator:
     
     def _generate_nema_ct_section(self):
         """Genera sezione analisi NEMA CT (5 cerchi)"""
-        if 'ct' not in self.nema_results:
+        if not self.nema_results or 'ct' not in self.nema_results:
             return ""
         
         nema_ct = self.nema_results['ct']
@@ -1468,6 +1544,105 @@ class HTMLReportGenerator:
         </div>
         """
     
+    def _generate_iqcheck_section(self):
+        """
+        Genera la sezione IQCheck CT nel report.
+        I dati provengono da api_iqcheck.py (dict con evaluations, overall_pass, ecc.)
+        e vengono inseriti dopo l'analisi NEMA CT.
+        """
+        if not self.iqcheck_data:
+            return ""
+
+        data       = self.iqcheck_data
+        evals      = data.get('evaluations', {})
+        limits     = data.get('limits', {})
+        units      = data.get('units', {})
+        labels     = data.get('labels', {})
+        date_str   = data.get('date', '')
+
+        # Solo PASS / FAIL — identico a iq_check.html
+        badge_css  = {'pass': 'badge-success', 'fail': 'badge-danger'}
+        badge_icon = {'pass': '✅',             'fail': '❌'}
+
+        def field_row(phantom, field):
+            """Riga HTML per un singolo parametro IQCheck."""
+            value  = data[phantom][field]
+            ev     = evals.get(phantom, {}).get(field, 'pass')
+            lo, hi = limits.get(phantom, {}).get(field, ('-', '-'))
+            unit   = units.get(field, '')
+            label  = labels.get(field, field.capitalize())
+            css    = badge_css[ev]
+            icon   = badge_icon[ev]
+            return f"""
+                <tr>
+                    <td><strong>{label}</strong></td>
+                    <td style="text-align:right; font-weight:600;">
+                        {value:+.1f} {unit}
+                    </td>
+                    <td style="text-align:center; color:#7f8c8d; font-size:0.85em;">
+                        [{lo:+g} ; {hi:+g}] {unit}
+                    </td>
+                    <td><span class="badge {css}">{icon} {ev.upper()}</span></td>
+                </tr>"""
+
+        def phantom_table(phantom, fields):
+            """Tabella HTML per un fantoccio (head / body)."""
+            rows = "".join(field_row(phantom, f) for f in fields if f in data.get(phantom, {}))
+            title = "Head" if phantom == "head" else "Body"
+            color = "#2980b9" if phantom == "head" else "#8e44ad"
+            return f"""
+            <div class="iqcheck-phantom-card" style="border-top: 4px solid {color};">
+                <div class="iqcheck-phantom-title" style="color:{color};">
+                    🔬 Fantoccio {title}
+                </div>
+                <table class="iqcheck-table">
+                    <thead>
+                        <tr>
+                            <th>Parametro</th>
+                            <th style="text-align:right;">Valore</th>
+                            <th style="text-align:center;">Limiti</th>
+                            <th>Esito</th>
+                        </tr>
+                    </thead>
+                    <tbody>{rows}</tbody>
+                </table>
+            </div>"""
+
+        # Esito globale — solo PASS / FAIL
+        if data.get('overall_pass'):
+            global_badge = '<span class="badge badge-success" style="font-size:1.1em;">✅ PASS</span>'
+        else:
+            global_badge = '<span class="badge badge-danger" style="font-size:1.1em;">❌ FAIL</span>'
+
+        head_table = phantom_table('head', ['ct', 'uniformity', 'noise', 'low'])
+        body_table = phantom_table('body', ['ct', 'uniformity', 'noise'])
+
+        return f"""
+        <div class="section iqcheck-section">
+            <div class="section-title">
+                <div class="icon">📋</div>
+                <div>IQCheck CT — Qualità Immagine</div>
+            </div>
+
+            <div class="iqcheck-header-bar">
+                <div>
+                    <span style="font-size:0.9em; color:#7f8c8d;">Data acquisizione</span><br>
+                    <strong>{date_str}</strong>
+                </div>
+                <div>
+                    <span style="font-size:0.9em; color:#7f8c8d;">Esito complessivo</span><br>
+                    {global_badge}
+                </div>
+            </div>
+
+            <div class="iqcheck-grid">
+                {head_table}
+                {body_table}
+            </div>
+
+        </div>
+        """
+
     def _generate_secondary_captures_section(self):
         """Genera sezione secondary captures"""
         if not self.secondary_captures:

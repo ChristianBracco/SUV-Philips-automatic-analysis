@@ -212,27 +212,43 @@ serve({
     if (path === '/api/analyze' && req.method === 'POST') {
       try {
         const body = await req.json();
-        let { folderPath, folderPaths, selectedSeries } = body;
-        
+        let { folderPath, folderPaths, selectedSeries, iqcheckData } = body;
+
         // Supporta sia folderPath singolo che folderPaths array
         if (folderPath && !folderPaths) {
           folderPaths = [folderPath];
         }
-        
+
         if (!folderPaths || folderPaths.length === 0) {
           return new Response(JSON.stringify({ error: 'Missing folderPath or folderPaths' }), {
             status: 400,
             headers: { 'Content-Type': 'application/json' }
           });
         }
-        
+
         // Prepara argomenti: folderPath + selectedSeries UIDs
         const args = [...folderPaths];
         if (selectedSeries && Array.isArray(selectedSeries) && selectedSeries.length > 0) {
           args.push(...selectedSeries);
         }
-        
+
+        // Se presenti dati IQCheck, salvali in un file temporaneo e passa il path
+        let iqcheckTempPath: string | null = null;
+        if (iqcheckData && typeof iqcheckData === 'object') {
+          iqcheckTempPath = join(tmpdir(), `iqcheck_analyze_${Date.now()}.json`);
+          await writeFile(iqcheckTempPath, JSON.stringify(iqcheckData));
+          args.push('--iqcheck', iqcheckTempPath);
+        }
+
         const result = await runPython('api_analyze.py', args);
+
+        // Pulizia file temporaneo IQCheck
+        if (iqcheckTempPath) {
+          try {
+            const { unlink } = await import('fs/promises');
+            await unlink(iqcheckTempPath);
+          } catch { /* già eliminato o errore non critico */ }
+        }
         
         return new Response(JSON.stringify(result), {
           headers: { 'Content-Type': 'application/json' }
@@ -275,6 +291,46 @@ serve({
       }
     }
     
+    // POST /api/import-iqcheck - Importa JSON IQCheck CT
+    if (path === '/api/import-iqcheck' && req.method === 'POST') {
+      try {
+        const formData = await req.formData();
+        const file = formData.get('file') as File;
+
+        if (!file) {
+          return new Response(JSON.stringify({ error: 'Nessun file caricato' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+
+        // Salva il JSON in un file temporaneo
+        const timestamp = Date.now();
+        const tempPath = join(tmpdir(), `iqcheck_${timestamp}.json`);
+        const buffer = await file.arrayBuffer();
+        await writeFile(tempPath, Buffer.from(buffer));
+
+        // Processa con Python
+        const result = await runPython('api_iqcheck.py', [tempPath]);
+
+        // Rimuovi il file temporaneo
+        try {
+          const { unlink } = await import('fs/promises');
+          await unlink(tempPath);
+        } catch { /* ignora errori di cleanup */ }
+
+        return new Response(JSON.stringify(result), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+      } catch (error: any) {
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     // POST /api/generate-pdf - Genera PDF con Puppeteer (compatibile Windows)
     if (path === '/api/generate-pdf' && req.method === 'POST') {
       try {
